@@ -1,6 +1,6 @@
 # 通用 AI 编码规范 (Universal AI Coding Specification)
 
-**版本**: 1.2.0 (通用版)  **日期**: 2026-06-24
+**版本**: 1.3.0 (通用版)  **日期**: 2026-06-24
 
 > **适用范围**：所有编程语言的新代码；修改老代码时遵循最小变更原则（见 9.3），不强制重构未触及的代码
 > **适用语言**：Python / JavaScript / TypeScript / Go / Java / Rust / C# 等；C++ 优先使用《C++ AI 编码规范》
@@ -115,6 +115,32 @@ except Exception:                   # 错！过宽基类
 ### 6.2 敏感数据保护
 * 日志、监控、测试用例或任何持久化介质中，**严禁**硬编码或明文输出密钥、密码、API Token、私钥及用户隐私数据。
 
+### 6.3 SQL 注入防护
+* **必须**使用参数化查询（Prepared Statement）或 ORM 提供的参数绑定，**严禁**字符串拼接 SQL：
+
+  **正例**：
+  ```python
+  cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))   # 参数化
+  ```
+
+  **反例**：
+  ```python
+  cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")       # 错！拼接 SQL
+  cursor.execute("SELECT * FROM users WHERE id = " + user_id)       # 错！拼接 SQL
+  ```
+* 动态表名/列名**必须**使用白名单校验，**禁止**直接拼接用户输入
+* **必须**为数据库账号配置最小权限，**禁止**应用使用 root/sa 等超级权限账号
+
+### 6.4 配置与密钥管理
+* **必须**遵循 12-Factor App 规范：配置**必须**从环境变量或外部配置中心读取，**严禁**硬编码在代码或仓库中
+* 密钥管理**必须**遵循以下层级（优先级高→低）：
+  1. 专用密钥管理服务（如 HashiCorp Vault、AWS Secrets Manager、阿里云 KMS）
+  2. 环境变量（CI/CD 注入，**禁止**提交到仓库）
+  3. 加密的配置文件（密钥加密存储，主密钥从环境变量读取）
+* `.env` 文件**必须**加入 `.gitignore`，仓库中只提交 `.env.example` 模板
+* 配置**必须**分层管理：`default` → `dev` → `prod`，高优先级覆盖低优先级
+* **必须**在应用启动时校验必填配置项，缺失**必须**快速失败并给出明确错误
+
 ---
 
 ## 7. 测试与可验证交付
@@ -206,6 +232,9 @@ except Exception:                   # 错！过宽基类
 | 开源合规 / GPL | 5.2 |
 | 日志级别 / DEBUG / INFO / WARN | 6.1 |
 | 敏感数据 / 密钥 / Token | 6.2 |
+| SQL 注入 / 参数化查询 | 6.3 |
+| 配置管理 / 环境变量 / 12-Factor | 6.4 |
+| 密钥管理 / Vault / .env | 6.4 |
 | 单元测试 / 边界值 / 异常路径 | 7.1 |
 | 异步测试 / sleep | 7.2, 9.6 |
 | Git 提交格式 / 分支命名 | 8 |

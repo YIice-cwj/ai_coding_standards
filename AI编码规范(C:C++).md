@@ -1,6 +1,6 @@
 # C++ AI 编码规范
 
-**版本**: 4.4.0  **日期**: 2026-06-24
+**版本**: 4.5.0  **日期**: 2026-06-24
 
 > **适用范围**：所有 C++ 新代码；修改老代码时遵循最小变更原则（见 26.3），不强制重构未触及的代码
 > **使用方式**：AI 应在编码前全文加载本规范；遇到规则冲突时按下方"优先级"裁决
@@ -152,6 +152,36 @@
 - **必须**显式捕获需要的变量
 - **禁止**捕获过多变量
 
+### 7.3 函数设计规则
+- 函数长度**建议**不超过 50 行；超过**必须**考虑拆分（单一职责，见第24条）
+- 函数参数**建议**不超过 4 个；超过**必须**考虑封装为结构体或使用 builder 模式
+- **必须**使用提前返回（guard clause）简化嵌套：
+
+  **正例**：
+  ```cpp
+  bool process(const input_t& in) {
+      if (!in.is_valid()) { return false; }   // 提前返回
+      if (in.is_empty()) { return false; }
+      // 主逻辑
+      return true;
+  }
+  ```
+
+  **反例**：
+  ```cpp
+  bool process(const input_t& in) {
+      if (in.is_valid()) {
+          if (!in.is_empty()) {
+              // 深层嵌套
+              return true;
+          }
+      }
+      return false;
+  }
+  ```
+- **必须**优先使用纯函数（无副作用）；成员函数 `const` 修饰见第12条
+- **禁止**输出参数（非 const 引用作为返回值），**必须**使用返回值或 `std::optional` / `std::expected`
+
 ## 8. 移动语义
 
 - **必须**遵循 Rule of 0/3/5：
@@ -172,12 +202,73 @@
 - **禁止**在源文件中使用 `using namespace std`
 - 文件内部符号**必须**放在匿名命名空间
 
-## 10. 类型推导
+## 10. 类型推导与现代特性
 
+### 10.1 类型推导
 - **必须**明确使用 `auto`，避免隐式类型推导
 - `decltype` **必须**用于需要类型信息时
 - 模板函数**必须**使用尾返回类型或 `decltype`
 - `auto` 变量**必须**在声明时初始化
+- **禁止** `auto` 的以下反模式：
+
+  **反例**：
+  ```cpp
+  auto x = {1, 2, 3};           // 错！推导为 std::initializer_list<int>
+  auto p = new widget_t();      // 错！推导为 widget_t*，应避免裸 new（见第17条）
+  ```
+
+### 10.2 结构化绑定与 if constexpr
+- **必须**使用结构化绑定解构多返回值（替代 `std::tie`）：
+
+  ```cpp
+  auto [key, value] = *map_iter;            // 解构 map 节点
+  auto [x, y, z] = get_position();          // 解构多返回值
+  ```
+- **必须**使用 `if constexpr` 替代 SFINAE 实现编译期分支：
+
+  ```cpp
+  template<typename T>
+  void process(T&& v) {
+      if constexpr (std::is_integral_v<T>) {
+          // 整型路径
+      } else if constexpr (std::is_floating_point_v<T>) {
+          // 浮点路径
+      }
+  }
+  ```
+
+### 10.3 concept 与约束（C++20）
+- 模板约束**必须**优先使用 `concept` 替代 SFINAE / `static_assert`：
+
+  **正例**：
+  ```cpp
+  template<typename T>
+      requires std::integral<T>
+  T add(T a, T b) { return a + b; }
+
+  // 或简写形式
+  template<std::integral T>
+  T add(T a, T b) { return a + b; }
+  ```
+
+  **反例**：
+  ```cpp
+  template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+  T add(T a, T b) { return a + b; }   // 错！过时的 SFINAE 写法
+  ```
+- 自定义 concept **必须**使用 `_t` 后缀以外的命名（concept 是编译期谓词，不加 `_t`）：`template<typename T> concept hashable = ...;`
+
+### 10.4 属性（Attributes）
+- 返回值不应被忽略的函数**必须**标记 `[[nodiscard]]`：
+  ```cpp
+  [[nodiscard]] bool is_valid() const;
+  [[nodiscard]] std::unique_ptr<widget_t> create();
+  ```
+- 暂未使用的变量/参数**必须**标记 `[[maybe_unused]]`，**禁止**用 `(void)` 强转：
+  ```cpp
+  void on_event([[maybe_unused]] const event_t& e) { ... }
+  ```
+- **禁止**使用 `[[deprecated]]` 之外的编译器扩展属性（如 `__attribute__((...))`），**必须**使用标准属性
 
 ## 11. 模板规范
 
@@ -195,9 +286,45 @@
 
 ## 13. 性能与最佳实践
 
+### 13.1 通用规则
 - **禁止**不必要拷贝，优先移动
 - **禁止**在构造函数中做复杂操作
 - **必须**使用 `std::optional` 表示可选值
+
+### 13.2 返回值优化（RVO/NRVO）
+- **必须**按值返回局部对象，依赖 RVO/NRVO，**禁止**返回 `std::move` 局部对象（会禁用 NRVO）：
+
+  **正例**：
+  ```cpp
+  widget_t make_widget() {
+      widget_t w;          // 局部对象
+      w.configure();
+      return w;            // NRVO 自动生效
+  }
+  ```
+
+  **反例**：
+  ```cpp
+  widget_t make_widget() {
+      widget_t w;
+      return std::move(w); // 错！禁用 NRVO，强制移动
+  }
+  ```
+
+### 13.3 容器使用
+- **必须**在已知元素数量时调用 `reserve()` 预分配，避免多次重分配：
+  ```cpp
+  std::vector<int> v;
+  v.reserve(n);            // 预分配
+  for (int i = 0; i < n; ++i) { v.push_back(i); }
+  ```
+- **必须**优先使用 `emplace_back` / `emplace` 替代 `push_back` / `insert`，避免临时对象：
+  ```cpp
+  v.emplace_back(42, "name");   // 直接构造
+  v.push_back(widget_t(42, "name")); // 错！多一次移动/拷贝
+  ```
+- **禁止**对顺序容器使用 `std::list`（缓存不友好），**必须**优先 `std::vector` / `std::deque`
+- 容器选择详见**附录 B：容器选择决策树**
 
 ## 14. 错误处理
 
@@ -244,12 +371,52 @@ catch (const std::exception& e) {  // 错！过宽基类
 
 ## 16. 并发规范
 
-- **必须**使用 RAII 管理锁（`std::lock_guard`）
+### 16.1 锁与同步原语
+- **必须**使用 RAII 管理锁（`std::lock_guard` / `std::unique_lock` / `std::scoped_lock`）
 - **禁止**在持锁期间执行耗时操作
 - **必须**避免死锁：**禁止**嵌套锁，**必须**按固定顺序获取锁
+- 需要同时获取多把锁时，**必须**使用 `std::scoped_lock`（自动死锁避免）：
+  ```cpp
+  std::scoped_lock lk(mutex_a_, mutex_b_);   // 原子获取多把锁
+  ```
+- 读多写少场景**必须**使用 `std::shared_mutex` + `std::shared_lock`：
+  ```cpp
+  mutable std::shared_mutex mutex_;
+  // 读端
+  std::shared_lock lk(mutex_);
+  // 写端
+  std::unique_lock lk(mutex_);
+  ```
+- **禁止**使用 `std::recursive_mutex`（设计气味，通常说明锁粒度有问题）
+
+### 16.2 线程管理
+- **必须**使用 `std::jthread` 替代 `std::thread`（C++20，自动 join + 支持取消）：
+  ```cpp
+  std::jthread worker([this](std::stop_token st) {
+      while (!st.stop_requested()) { /* ... */ }
+  });
+  ```
+- **禁止**使用裸 `std::thread`（忘记 join/detach 会导致 terminate）
+
+### 16.3 原子操作与内存序
 - 共享数据**必须**使用原子操作或锁保护
 - **必须**使用 `std::atomic` 替代简单标志位的 volatile
-- 线程间通信**必须**使用消息队列或条件变量
+- **必须**正确选择内存序：
+  - 默认 `memory_order_seq_cst`（顺序一致，最安全）
+  - 仅在性能剖析确认需要时使用 `memory_order_acquire` / `memory_order_release` / `memory_order_relaxed`
+  - **禁止**无依据地使用 `memory_order_relaxed`
+
+### 16.4 线程局部存储与通信
+- 线程私有状态**必须**使用 `thread_local`：
+  ```cpp
+  thread_local context_t tls_ctx;
+  ```
+- 线程间通信**必须**使用消息队列、条件变量或 `std::promise` / `std::future`
+- **禁止**使用条件变量的虚假唤醒：**必须**用谓词形式 `wait(lk, predicate)`：
+  ```cpp
+  std::unique_lock lk(mutex_);
+  cv_.wait(lk, [this] { return ready_ || cancelled_; });  // 谓词形式
+  ```
 
 ## 17. 内存管理
 
@@ -299,6 +466,30 @@ delete p;                                    // 错！裸 delete
 - **禁止**在代码中硬编码密钥、密码
 - **必须**使用 `sizeof(buffer)` 而非硬编码大小
 - **禁止**使用 `rand` 生成安全随机数，**必须**使用 `std::random_device`
+
+### 19.1 `std::string_view` 生命周期安全
+- `std::string_view` **必须**视为非所有权视图，**禁止**持有超出源字符串生命周期的 view：
+
+  **正例**：
+  ```cpp
+  void process(std::string_view sv);             // 函数参数：安全
+  std::string s = make_string();
+  std::string_view sv = s;                        // 同作用域：安全
+  ```
+
+  **反例**：
+  ```cpp
+  std::string_view get_view() {
+      std::string s = make_temp();                // 临时对象
+      return s;                                   // 错！返回指向已销毁对象的 view
+  }
+  std::string_view sv = "hello"s;                 // 错！临时 string 销毁，view 悬垂
+  ```
+- 类成员**禁止**使用 `std::string_view` 存储字符串，**必须**使用 `std::string`
+- **必须**使用 `std::span` 替代 `const T*` + `size_t` 的连续内存参数组合：
+  ```cpp
+  void process(std::span<const int> data);       // 替代 (const int* p, size_t n)
+  ```
 
 ---
 
@@ -431,9 +622,22 @@ delete p;                                    // 错！裸 delete
 | 类成员组织顺序 | 4 |
 | 接口设计 / i_ 前缀 | 6 |
 | 并发 / 锁 / 死锁 | 16 |
+| jthread / shared_mutex / scoped_lock | 16 |
+| 内存序 / memory_order | 16.3 |
+| thread_local | 16.4 |
 | RAII | 16, 17 |
 | 日志格式 | 15 |
 | 安全字符串 / strcpy / strncpy | 19 |
+| string_view 生命周期 / 悬垂 | 19.1 |
+| span / 连续内存参数 | 19.1 |
+| concept / C++20 约束 | 10.3 |
+| [[nodiscard]] / 属性 | 10.4 |
+| 结构化绑定 / if constexpr | 10.2 |
+| auto 反模式 | 10.1 |
+| RVO / NRVO / 返回值优化 | 13.2 |
+| 容器选择 / vector / list / map | 13.3, 附录 B |
+| reserve / emplace_back | 13.3 |
+| 函数设计 / 长度 / 参数 / 提前返回 | 7.3 |
 | C++ 标准版本 / CMake / 编译选项 | 21 |
 | 单例模式 | 22 |
 | 工厂模式 | 22 |
@@ -441,3 +645,39 @@ delete p;                                    // 错！裸 delete
 | AI 反模式 / 禁止行为 | 26.6 |
 | 最小变更 / 顺手重构 | 26.3, 26.6 |
 | YAGNI / KISS / DRY | 24, 26.2 |
+
+---
+
+## 附录 B：容器选择决策树
+
+```
+需要存储键值对？
+├─ 是 → 需要有序遍历？
+│       ├─ 是 → std::map / std::set（红黑树，O(log n)）
+│       └─ 否 → std::unordered_map / std::unordered_set（哈希，O(1) 平均）
+└─ 否 → 需要顺序访问？
+        ├─ 是 → 需要头尾高效增删？
+        │       ├─ 是 → std::deque（双端队列）
+        │       └─ 否 → std::vector（默认首选，缓存友好）
+        └─ 否 → 需要频繁中间增删？
+                ├─ 是 → 重新评估设计（优先 vector + erase/remove）
+                └─ 否 → std::vector
+```
+
+**容器选择原则**：
+- **默认首选** `std::vector`：缓存友好、内存连续、随机访问 O(1)
+- **禁止**默认使用 `std::list`：缓存不友好、内存碎片、随机访问 O(n)
+- **仅当**频繁中间增删**且**不需要随机访问时才考虑 `std::list`
+- 字符串容器**必须**使用 `std::vector<std::string>` 或 `std::string`，**禁止** `const char*` 容器
+
+**常见场景对照**：
+
+| 场景 | 推荐容器 | 原因 |
+|------|---------|------|
+| 动态数组 | `std::vector` | 默认首选 |
+| 固定大小数组 | `std::array` | 栈分配，无开销 |
+| 哈希查找 | `std::unordered_map` | O(1) 查找 |
+| 有序遍历 | `std::map` | O(log n)，按键排序 |
+| 栈结构 | `std::vector` + `push_back`/`pop_back` | 比适配器更灵活 |
+| 队列结构 | `std::deque` | 头尾 O(1) |
+| 优先队列 | `std::priority_queue` | 堆实现 |
