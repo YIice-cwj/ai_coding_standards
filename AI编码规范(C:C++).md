@@ -1,6 +1,6 @@
 # C++ AI 编码规范
 
-**版本**: 4.5.0  **日期**: 2026-06-24
+**版本**: 4.5.1  **日期**: 2026-06-24
 
 > **适用范围**：所有 C++ 新代码；修改老代码时遵循最小变更原则（见 26.3），不强制重构未触及的代码
 > **使用方式**：AI 应在编码前全文加载本规范；遇到规则冲突时按下方"优先级"裁决
@@ -92,6 +92,38 @@
 
 ### 3.3 类注释
 - 重要类**必须**包含注释，说明功能、设计思路、使用场景
+
+### 3.4 函数内部注释
+- **禁止**在函数体内添加任何行内注释（`// xxx`）或块注释
+- 如需说明函数实现思路、关键步骤、注意事项，**必须**写在函数定义上方的文档注释 `/** */` 中（与 3.2 衔接）
+- 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（见第24条单一职责）
+
+**正例**：
+```cpp
+/**
+ * @brief 计算用户得分
+ * @param user 用户信息
+ * @return 加权后的得分
+ *
+ * 实现思路：基础分 + 活跃度加成 - 违规惩罚
+ */
+int calc_score(const user_t& user) {
+    int base = user.base_score;
+    int bonus = user.active_days * BONUS_PER_DAY;
+    int penalty = user.violations * PENALTY;
+    return base + bonus - penalty;
+}
+```
+
+**反例**：
+```cpp
+int calc_score(const user_t& user) {
+    int base = user.base_score;
+    int bonus = user.active_days * BONUS_PER_DAY;  // 计算活跃度加成
+    int penalty = user.violations * PENALTY;       // 扣除违规惩罚
+    return base + bonus - penalty;                  // 返回总分
+}
+```
 
 ## 4. 类结构规范
 
@@ -637,6 +669,7 @@ delete p;                                    // 错！裸 delete
 | RVO / NRVO / 返回值优化 | 13.2 |
 | 容器选择 / vector / list / map | 13.3, 附录 B |
 | reserve / emplace_back | 13.3 |
+| 函数内部注释 / 行内注释 / 文档注释 | 3.4 |
 | 函数设计 / 长度 / 参数 / 提前返回 | 7.3 |
 | C++ 标准版本 / CMake / 编译选项 | 21 |
 | 单例模式 | 22 |

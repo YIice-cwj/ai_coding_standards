@@ -1,6 +1,6 @@
 # 通用 AI 编码规范 (Universal AI Coding Specification)
 
-**版本**: 1.3.0 (通用版)  **日期**: 2026-06-24
+**版本**: 1.3.1 (通用版)  **日期**: 2026-06-24
 
 > **适用范围**：所有编程语言的新代码；修改老代码时遵循最小变更原则（见 9.3），不强制重构未触及的代码
 > **适用语言**：Python / JavaScript / TypeScript / Go / Java / Rust / C# 等；C++ 优先使用《C++ AI 编码规范》
@@ -20,6 +20,33 @@
 ### 1.2 编码与换行
 * 所有源码文件**必须**使用 UTF-8 无 BOM 编码。
 * 所有文件**必须**使用 LF（`\n`）换行符，**严禁**在任何开发平台或操作系统下使用 CRLF。
+
+### 1.3 函数内部注释
+* **禁止**在函数体内添加任何行内注释或块注释
+* 如需说明函数实现思路、关键步骤、注意事项，**必须**写在函数定义上方的文档注释块中（语言对应格式：Python `"""docstring"""`、JavaScript/TypeScript `/** */`、Go `//` 文档注释紧贴函数上方、Java `/** */` Javadoc）
+* 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（遵循第3条单一职责）
+
+**正例**（Python）：
+```python
+def calc_score(user):
+    """计算用户得分。
+
+    实现思路：基础分 + 活跃度加成 - 违规惩罚
+    """
+    base = user.base_score
+    bonus = user.active_days * BONUS_PER_DAY
+    penalty = user.violations * PENALTY
+    return base + bonus - penalty
+```
+
+**反例**（Python）：
+```python
+def calc_score(user):
+    base = user.base_score
+    bonus = user.active_days * BONUS_PER_DAY  # 计算活跃度加成
+    penalty = user.violations * PENALTY       # 扣除违规惩罚
+    return base + bonus - penalty             # 返回总分
+```
 
 ---
 
@@ -222,6 +249,7 @@ except Exception:                   # 错！过宽基类
 
 | 关键词 | 相关章节 |
 |--------|---------|
+| 函数内部注释 / 行内注释 / docstring | 1.3 |
 | 异常捕获 / try-catch / except | 4.2, 9.6 |
 | 依赖版本 / lockfile / latest | 5.2 |
 | 私有成员命名 / 双下划线 | 2.2, 9.6 |
