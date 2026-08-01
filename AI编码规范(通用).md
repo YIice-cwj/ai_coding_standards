@@ -1,6 +1,6 @@
 # 通用 AI 编码规范 (Universal AI Coding Specification)
 
-**版本**: 1.4.0 (通用版)  **日期**: 2026-06-24
+**版本**: 1.7.1 (通用版)  **日期**: 2026-08-01
 
 > **适用范围**：所有编程语言的新代码；修改老代码时遵循最小变更原则（见 9.3），不强制重构未触及的代码
 > **适用语言**：Python / JavaScript / TypeScript / Go / Java / Rust / C# 等；C++ 优先使用《C++ AI 编码规范》
@@ -26,26 +26,31 @@
 * 如需说明函数实现思路、关键步骤、注意事项，**必须**写在函数定义上方的文档注释块中（语言对应格式：Python `"""docstring"""`、JavaScript/TypeScript `/** */`、Go `//` 文档注释紧贴函数上方、Java `/** */` Javadoc）
 * 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（遵循第3条单一职责）
 
-**正例**（Python）：
-```python
-def calc_score(user):
-    """计算用户得分。
-
-    实现思路：基础分 + 活跃度加成 - 违规惩罚
-    """
-    base = user.base_score
-    bonus = user.active_days * BONUS_PER_DAY
-    penalty = user.violations * PENALTY
-    return base + bonus - penalty
+**正例**（C++）：
+```cpp
+/**
+ * @brief 计算用户得分
+ * @param user 用户信息
+ * @return 加权后的得分
+ *
+ * 实现思路：基础分 + 活跃度加成 - 违规惩罚
+ */
+int calc_score(const user_t& user) {
+    int base = user.base_score;
+    int bonus = user.active_days * BONUS_PER_DAY;
+    int penalty = user.violations * PENALTY;
+    return base + bonus - penalty;
+}
 ```
 
-**反例**（Python）：
-```python
-def calc_score(user):
-    base = user.base_score
-    bonus = user.active_days * BONUS_PER_DAY  # 计算活跃度加成
-    penalty = user.violations * PENALTY       # 扣除违规惩罚
-    return base + bonus - penalty             # 返回总分
+**反例**（C++）：
+```cpp
+int calc_score(const user_t& user) {
+    int base = user.base_score;
+    int bonus = user.active_days * BONUS_PER_DAY;  // 计算活跃度加成
+    int penalty = user.violations * PENALTY;       // 扣除违规惩罚
+    return base + bonus - penalty;                  // 返回总分
+}
 ```
 
 ---
@@ -80,29 +85,38 @@ AI 编写或重构的代码**必须**严格遵循以下七大软件工程原则�
 ### 4.1 防御性编程
 * 所有函数/API 的外部输入（用户输入、外部网络响应、配置文件等）**必须**在入口处进行合法性与边界校验。
 * **必须**优先使用强类型、断言（Assert）或语言提供的可选包装类型（如 `Optional`、`Result`）来显式处理空值或故障状态。
+* 支持静态类型或渐进类型的语言（如 TypeScript、Python、Go、Java），**必须**为所有函数参数、返回值及公共变量提供明确的类型标注；**禁止**在 TypeScript 中滥用 `any`（应使用 `unknown` 或定义具体接口），**禁止**在 Python 中忽略 `typing` 类型标注。
 
 ### 4.2 异常与资源安全
 * **禁止**裸捕获所有异常（如空 catch 块或无日志的默默吞掉），**必须**针对具体异常类型进行精确处理，并记录完整的错误上下文。
 * **禁止**捕获过宽基类异常（如 `catch Exception` / `except:` / `catch(Throwable)`），**必须**捕获具体异常类型；仅在库边界且必要时可捕获基类并重新抛出。
 * 无论是否发生异常，所有持有的外部资源（文件句柄、网络连接、锁）**必须**确保被正确释放，优先使用 RAII、`try-with-resources` 或 `defer` 机制。
 
-**正例**：
-```python
-try:
-    do_something()
-except SpecificError as e:           # 捕获具体类型
-    logger.error("failed: %s", e)   # 记录上下文
-    raise                           # 或返回错误码
+### 4.3 异步与并发安全
+* **必须**显式处理所有异步操作（Promise / async-await / Future）的异常，**禁止**出现未捕获的 Floating Promise。
+* 异步函数**必须**包含正确的等待（`await` / `.then()` 链式处理）或显式取消机制，**禁止**创建无人管辖的后台悬空任务。
+* 跨线程/协程共享可变状态时，**必须**使用语言推荐的同步原语（如锁、Channel、原子操作）保护，**禁止**在无同步机制下竞争共享数据。
+
+**正例**（C++）：
+```cpp
+try {
+    do_something();
+} catch (const specific_error_t& e) {  // 捕获具体类型
+    logger.error("failed: {}", e.what());
+    throw;                             // 或返回错误码
+}
 ```
 
-**反例**：
-```python
-try:
-    do_something()
-except:                              # 错！过宽捕获
-    pass                            # 错！默默吞掉
-except Exception:                   # 错！过宽基类
-    pass
+**反例**（C++）：
+```cpp
+try {
+    do_something();
+} catch (...) {                        // 错！裸 catch-all 吞异常
+    // pass
+}
+catch (const std::exception& e) {      // 错！过宽基类捕获
+    // pass
+}
 ```
 
 ---
@@ -145,15 +159,14 @@ except Exception:                   # 错！过宽基类
 ### 6.3 SQL 注入防护
 * **必须**使用参数化查询（Prepared Statement）或 ORM 提供的参数绑定，**严禁**字符串拼接 SQL：
 
-  **正例**：
-  ```python
-  cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))   # 参数化
+  **正例**（C++）：
+  ```cpp
+  stmt.execute("SELECT * FROM users WHERE id = ?", user_id);        // 参数化绑定
   ```
 
-  **反例**：
-  ```python
-  cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")       # 错！拼接 SQL
-  cursor.execute("SELECT * FROM users WHERE id = " + user_id)       # 错！拼接 SQL
+  **反例**（C++）：
+  ```cpp
+  stmt.execute("SELECT * FROM users WHERE id = " + std::to_string(user_id)); // 错！拼接 SQL
   ```
 * 动态表名/列名**必须**使用白名单校验，**禁止**直接拼接用户输入
 * **必须**为数据库账号配置最小权限，**禁止**应用使用 root/sa 等超级权限账号
@@ -210,6 +223,7 @@ except Exception:                   # 错！过宽基类
 
 ### 9.2 简洁实现原则 (YAGNI)
 * **设计阶段**：**必须**使用最少代码解决当前问题。如果 50 行可以优雅解决，**严禁**扩充到 200 行。
+* **必须**遵循代码最小化原则：能写一条代码实现**绝不**写两条，**禁止**冗余拆分或人为增加步骤。
 * **禁止**编写任何"未来可能有用"的冗余结构、泛化接口或过度抽象。
 * 通用 KISS/DRY 原则详见第 3 条，此处不重复。
 
@@ -227,29 +241,28 @@ except Exception:                   # 错！过宽基类
 
 ### 9.6 AI 反模式清单（禁止行为）
 
-以下为 AI 编码时高频出现的错误，**必须**避免：
+以下禁止行为已在对应章节明确规定，此处仅做分类汇总：
 
-- **禁止**顺手重构无关代码（即使"看起来不顺眼"）
-- **禁止**为未来需求设计抽象（YAGNI）
-- **禁止**添加未要求的错误处理、日志、注释、类型标注
-- **禁止**修改未触及代码的格式或命名
-- **禁止**在修复 bug 时"顺便"优化周边代码
-- **禁止**擅自引入未注册的第三方库
-- **禁止**使用双下划线 `__` 前缀（C++ UB / Python 名称改写）
-- **禁止**捕获过宽异常类型（如 `except:` / `catch Exception`）
-- **禁止**裸捕获异常后默默吞掉（空 catch / 无日志）
-- **禁止**在测试中使用 `sleep` 等待异步完成
-- **禁止**硬编码密钥、密码、Token
-- **禁止**使用 `latest` tag 或 `*` 通配符指定依赖版本
-- **禁止**在日志中输出敏感信息
+- **越权修改类**：顺手重构/优化/格式化无关代码（9.3）、添加未要求的功能（9.2）
+- **语言规范类**：双下划线 `__`（2.2）、滥用 `any` 强转抑制类型系统（4.1）
+- **依赖类**：擅自引入未注册第三方库（5.2）、使用 `latest`/`*`（5.2）
+- **错误处理与异步类**：过宽异常捕获 `except:`/`catch Exception`、空 catch（4.2）、悬空 Floating Promise（4.3）
+- **测试类**：`sleep` 等待异步（7.2）
+- **安全类**：硬编码密钥密码 Token（6.2）、日志输出敏感信息（6.2）
 
 ### 9.7 版本号管理原则
-* **每次**修改本规范文档**必须**同步更新头部版本号与日期，**禁止**只改内容不改版本号
-* 版本号升级**必须**遵循语义化版本（SemVer）：
-  - **主版本（MAJOR）**：不兼容变更，如删除/重写既有章节、反转规则语义
-  - **次版本（MINOR）**：新增章节、新增规则、补充正反例、新增附录
-  - **修订号（PATCH）**：修正笔误、调整格式、优化措辞
-* 提交信息**必须**在变更描述中明确写出"版本 X.Y.Z → X.Y.Z"的升级轨迹（与第8条 Git 规范衔接）
+* **每次修改必须同步更新**头部版本号与日期，**禁止**只改内容不改版本号
+* 版本号遵循语义化版本（见头部"版本规则"），提交信息**必须**写明版本升级轨迹（与第8条 Git 规范衔接）
+
+### 9.8 AI 交付前强制自查 Checklist
+
+AI 在完成代码编写或修改后，**必须**在答复或提交前进行以下逐条自我检查：
+
+- [ ] 1. **最小变更**：是否仅修改了与任务直接相关的代码？（未擅自格式化或重构无关代码）
+- [ ] 2. **注释规范**：函数内部是否无多余行内注释？（实现思路已写在头部文档注释中）
+- [ ] 3. **类型与安全**：强/渐进类型语言是否已提供明确类型标注？是否有硬编码密钥或密码？
+- [ ] 4. **异常与异步**：是否有被忽略的 Floating Promise 或未捕获的过宽 catch？
+- [ ] 5. **版本与文档**：代码修改后是否同步检查并更新了相关的文档与版本履历表？
 
 ---
 
@@ -259,6 +272,8 @@ except Exception:                   # 错！过宽基类
 |--------|---------|
 | 函数内部注释 / 行内注释 / docstring | 1.3 |
 | 异常捕获 / try-catch / except | 4.2, 9.6 |
+| 强类型 / 类型标注 / TypeScript any / Python typing | 4.1 |
+| 异步与并发安全 / Floating Promise | 4.3, 9.6 |
 | 依赖版本 / lockfile / latest | 5.2 |
 | 私有成员命名 / 双下划线 | 2.2, 9.6 |
 | 七大原则 / SRP / OCP / LSP / DIP / ISP / DRY / KISS | 3 |
@@ -276,7 +291,9 @@ except Exception:                   # 错！过宽基类
 | Git 提交格式 / 分支命名 | 8 |
 | 版本号管理 / SemVer / 升级规则 | 9.7 |
 | AI 反模式 / 禁止行为 | 9.6 |
+| AI 交付前自查 Checklist | 9.8 |
 | 最小变更 / 顺手重构 | 9.3, 9.6 |
+| 简洁实现 / 代码最小化 / 一条原则 | 9.2 |
 | YAGNI / KISS / DRY | 3, 9.2 |
 | 需求确认 / 假设 | 9.1 |
 | 文档同步 | 9.5 |
