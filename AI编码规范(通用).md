@@ -1,6 +1,6 @@
 # 通用 AI 编码规范 (Universal AI Coding Specification)
 
-**版本**: 1.7.1 (通用版)  **日期**: 2026-08-01
+**版本**: 1.8.1 (通用版)  **日期**: 2026-08-22
 
 > **适用范围**：所有编程语言的新代码；修改老代码时遵循最小变更原则（见 9.3），不强制重构未触及的代码
 > **适用语言**：Python / JavaScript / TypeScript / Go / Java / Rust / C# 等；C++ 优先使用《C++ AI 编码规范》
@@ -15,6 +15,7 @@
 
 ### 1.1 团队与语言惯例
 * **必须**严格遵循目标编程语言的官方或行业主流风格指南（如 Python 的 PEP 8、Go 的 gofmt、Java 的 Google Style Guide）。
+* 项目已有明确风格约定时，AI **必须**优先遵循项目既有风格动态调整，而非强制套用语言默认惯例或个人风格偏好。
 * 同一项目内**必须**统一缩进宽度与风格，**严禁**混用 Tab 和空格。
 
 ### 1.2 编码与换行
@@ -26,31 +27,22 @@
 * 如需说明函数实现思路、关键步骤、注意事项，**必须**写在函数定义上方的文档注释块中（语言对应格式：Python `"""docstring"""`、JavaScript/TypeScript `/** */`、Go `//` 文档注释紧贴函数上方、Java `/** */` Javadoc）
 * 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（遵循第3条单一职责）
 
-**正例**（C++）：
-```cpp
-/**
- * @brief 计算用户得分
- * @param user 用户信息
- * @return 加权后的得分
- *
- * 实现思路：基础分 + 活跃度加成 - 违规惩罚
- */
-int calc_score(const user_t& user) {
-    int base = user.base_score;
-    int bonus = user.active_days * BONUS_PER_DAY;
-    int penalty = user.violations * PENALTY;
-    return base + bonus - penalty;
-}
+**正例**（Python）：
+```python
+def calc_score(user: UserData) -> int:
+    """计算用户得分。
+
+    实现思路：基础分 + 活跃度加成 - 违规惩罚
+    """
+    bonus = user.active_days * BONUS_PER_DAY
+    return user.base_score + bonus - user.violations * PENALTY
 ```
 
-**反例**（C++）：
-```cpp
-int calc_score(const user_t& user) {
-    int base = user.base_score;
-    int bonus = user.active_days * BONUS_PER_DAY;  // 计算活跃度加成
-    int penalty = user.violations * PENALTY;       // 扣除违规惩罚
-    return base + bonus - penalty;                  // 返回总分
-}
+**反例**（Python）：
+```python
+def calc_score(user: UserData) -> int:
+    bonus = user.active_days * BONUS_PER_DAY  # 计算活跃度加成
+    return user.base_score + bonus - user.violations * PENALTY  # 返回总分
 ```
 
 ---
@@ -97,26 +89,23 @@ AI 编写或重构的代码**必须**严格遵循以下七大软件工程原则�
 * 异步函数**必须**包含正确的等待（`await` / `.then()` 链式处理）或显式取消机制，**禁止**创建无人管辖的后台悬空任务。
 * 跨线程/协程共享可变状态时，**必须**使用语言推荐的同步原语（如锁、Channel、原子操作）保护，**禁止**在无同步机制下竞争共享数据。
 
-**正例**（C++）：
-```cpp
-try {
-    do_something();
-} catch (const specific_error_t& e) {  // 捕获具体类型
-    logger.error("failed: {}", e.what());
-    throw;                             // 或返回错误码
-}
+**正例**（Python）：
+```python
+try:
+    do_something()
+except SpecificError as e:  # 捕获具体类型
+    logger.error("failed: %s", e)
+    raise                    # 或返回错误对象
 ```
 
-**反例**（C++）：
-```cpp
-try {
-    do_something();
-} catch (...) {                        // 错！裸 catch-all 吞异常
-    // pass
-}
-catch (const std::exception& e) {      // 错！过宽基类捕获
-    // pass
-}
+**反例**（Python）：
+```python
+try:
+    do_something()
+except:                      # 错！裸 except 吞异常
+    pass
+except Exception:            # 错！过宽基类捕获
+    pass
 ```
 
 ---
@@ -159,14 +148,14 @@ catch (const std::exception& e) {      // 错！过宽基类捕获
 ### 6.3 SQL 注入防护
 * **必须**使用参数化查询（Prepared Statement）或 ORM 提供的参数绑定，**严禁**字符串拼接 SQL：
 
-  **正例**（C++）：
-  ```cpp
-  stmt.execute("SELECT * FROM users WHERE id = ?", user_id);        // 参数化绑定
+  **正例**（TypeScript）：
+  ```typescript
+  await db.query("SELECT * FROM users WHERE id = ?", [user_id]);  // 参数化绑定
   ```
 
-  **反例**（C++）：
-  ```cpp
-  stmt.execute("SELECT * FROM users WHERE id = " + std::to_string(user_id)); // 错！拼接 SQL
+  **反例**（TypeScript）：
+  ```typescript
+  await db.query(`SELECT * FROM users WHERE id = ${user_id}`);    // 错！模板字符串拼接 SQL
   ```
 * 动态表名/列名**必须**使用白名单校验，**禁止**直接拼接用户输入
 * **必须**为数据库账号配置最小权限，**禁止**应用使用 root/sa 等超级权限账号
@@ -217,9 +206,12 @@ catch (const std::exception& e) {      // 错！过宽基类捕获
 
 ## 9. AI 核心协作与行为约束（核心铁律）
 
-### 9.1 需求确认原则
-* AI 在面对模糊、不确定或上下文缺失的需求时，**必须**停止假设，直接向用户提问。
-* **严禁**基于主观推断盲目编写代码，一切逻辑变更**必须**以用户明确给出的指令和边界为准。
+### 9.1 需求确认与计划先行原则
+* **必须**在遇到不确定问题时先向用户问清楚，**严禁**盲猜或基于假设实现；只要存在一点不明确之处，**必须**提出问题
+* 全部问题问清后，**必须**先产出一份详细的计划文档（`.md`）供用户阅读审查，**严禁**跳过审查直接动手编码
+* **必须**待用户确认计划符合需求并明确下达指令后，才开始实现
+* 计划不符合需求时，**必须**由用户指出不符合的内容并说明原因，AI 据此修订计划并再次提交审查
+* 实施过程中的任何阶段**均可以**向用户提问；**任何时候严禁**瞎猜用户意图，一切以用户明确说明为准
 
 ### 9.2 简洁实现原则 (YAGNI)
 * **设计阶段**：**必须**使用最少代码解决当前问题。如果 50 行可以优雅解决，**严禁**扩充到 200 行。
@@ -243,6 +235,7 @@ catch (const std::exception& e) {      // 错！过宽基类捕获
 
 以下禁止行为已在对应章节明确规定，此处仅做分类汇总：
 
+- **协作类**：盲猜需求、跳过计划审查直接编码（9.1）
 - **越权修改类**：顺手重构/优化/格式化无关代码（9.3）、添加未要求的功能（9.2）
 - **语言规范类**：双下划线 `__`（2.2）、滥用 `any` 强转抑制类型系统（4.1）
 - **依赖类**：擅自引入未注册第三方库（5.2）、使用 `latest`/`*`（5.2）
@@ -258,11 +251,12 @@ catch (const std::exception& e) {      // 错！过宽基类捕获
 
 AI 在完成代码编写或修改后，**必须**在答复或提交前进行以下逐条自我检查：
 
-- [ ] 1. **最小变更**：是否仅修改了与任务直接相关的代码？（未擅自格式化或重构无关代码）
-- [ ] 2. **注释规范**：函数内部是否无多余行内注释？（实现思路已写在头部文档注释中）
-- [ ] 3. **类型与安全**：强/渐进类型语言是否已提供明确类型标注？是否有硬编码密钥或密码？
-- [ ] 4. **异常与异步**：是否有被忽略的 Floating Promise 或未捕获的过宽 catch？
-- [ ] 5. **版本与文档**：代码修改后是否同步检查并更新了相关的文档与版本履历表？
+- [ ] 1. **计划先行**：编码前是否已提交计划文档并获得用户确认？（9.1）
+- [ ] 2. **最小变更**：是否仅修改了与任务直接相关的代码？（未擅自格式化或重构无关代码）
+- [ ] 3. **注释规范**：函数内部是否无多余行内注释？（实现思路已写在头部文档注释中）
+- [ ] 4. **类型与安全**：强/渐进类型语言是否已提供明确类型标注？是否有硬编码密钥或密码？
+- [ ] 5. **异常与异步**：是否有被忽略的 Floating Promise 或未捕获的过宽 catch？
+- [ ] 6. **版本与文档**：代码修改后是否同步检查并更新了相关的文档与版本履历表？
 
 ---
 
@@ -295,5 +289,5 @@ AI 在完成代码编写或修改后，**必须**在答复或提交前进行以�
 | 最小变更 / 顺手重构 | 9.3, 9.6 |
 | 简洁实现 / 代码最小化 / 一条原则 | 9.2 |
 | YAGNI / KISS / DRY | 3, 9.2 |
-| 需求确认 / 假设 | 9.1 |
+| 需求确认 / 计划先行 / 先问后写 | 9.1 |
 | 文档同步 | 9.5 |

@@ -1,10 +1,10 @@
 # C++ AI 编码规范
 
-**版本**: 4.10.0  **日期**: 2026-08-01
+**版本**: 5.0.1  **日期**: 2026-08-22
 
-> **适用范围**：所有 C++ 新代码；修改老代码时遵循最小变更原则（见 26.3），不强制重构未触及的代码
+> **适用范围**：所有 C++ 新代码；修改老代码时遵循最小变更原则（见 22.4），不强制重构未触及的代码
 > **使用方式**：AI 应在编码前全文加载本规范；遇到规则冲突时按下方"优先级"裁决
-> **优先级**（高→低）：安全规范（19）> 正确性（14）> 可读性（3）> 性能（13）> 风格（1-2）
+> **优先级**（高→低）：安全规范（16）> 正确性（11）> 可读性（3）> 性能（10）> 风格（1-2）
 > **与其他规范关系**：本规范为 C++ 专用；通用规则见《通用 AI 编码规范》；两者冲突时以本规范为准
 > **版本规则**：遵循语义化版本（SemVer）
 
@@ -44,7 +44,7 @@
 | 接口 | `i_` 前缀 + `_t` | `i_handler_t` |
 
 **必须** struct、enum、using 使用 `_t` 后缀。
-**禁止**使用 `typedef`，统一使用 `using`（与 7.1 保持一致）。
+**禁止**使用 `typedef`，统一使用 `using`（与 6.1 保持一致）。
 
 ### 2.2 枚举类型
 - **必须**使用 `enum class`（scoped enum），**禁止**裸 `enum`
@@ -88,23 +88,8 @@
 ### 3.2 函数注释
 - **必须**使用 `/** */` 文档注释格式，**禁止**使用 `//` 行注释替代
 - 内容**必须**包含：功能、参数、返回值；重要函数**必须**补充实现思路或使用示例
-
-  ```cpp
-  /**
-   * @brief 计算用户得分
-   * @param user 用户信息
-   * @return 加权后的得分
-   */
-  int calc_score(const user_t& user);
-  ```
-
-### 3.3 类注释
-- 重要类**必须**包含注释，说明功能、设计思路、使用场景
-
-### 3.4 函数内部注释
-- **禁止**在函数体内添加任何行内注释（`// xxx`）或块注释
-- 如需说明函数实现思路、关键步骤、注意事项，**必须**写在函数定义上方的文档注释 `/** */` 中（与 3.2 衔接）
-- 若函数内部确需注释才能理解，说明函数过于复杂，**表现为违背单一职责，必须**考虑拆分（遵循第 24 条开发七大守则与通用规范第 3 条）
+- **禁止**在函数体内添加任何行内注释或块注释；实现思路、关键步骤、注意事项**必须**写在函数定义上方的文档注释中
+- 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（见第 21 条）
 
 **正例**：
 ```cpp
@@ -133,6 +118,9 @@ int calc_score(const user_t& user) {
 }
 ```
 
+### 3.3 类注释
+- 重要类**必须**包含注释，说明功能、设计思路、使用场景
+
 ## 4. 类结构规范
 
 **必须**按以下顺序组织：
@@ -145,7 +133,8 @@ int calc_score(const user_t& user) {
 7. public 成员函数
 8. 静态函数
 
-**函数实现顺序必须与类中声明顺序一致**：`.cc` / `.cpp` 中的函数实现**必须**按照头文件中声明的先后顺序排列，便于快速定位声明与实现对应关系。
+- 接口类型（`i_` 前缀，见 2.1）**必须**包含虚析构函数
+- **函数实现顺序必须与类中声明顺序一致**：`.cc` / `.cpp` 中的函数实现**必须**按照头文件中声明的先后顺序排列
 
 ## 5. 头文件规范
 
@@ -158,20 +147,11 @@ int calc_score(const user_t& user) {
 
 - **必须**使用 `#pragma once`
 - **必须**使用前向声明减少依赖
-- 小型函数的内联实现**必须**放在对应访问权限区域的最末尾（按 public → protected → private 顺序与声明区域对齐）
-  - public 成员函数的内联实现：写在 public 区域末尾
-  - protected 成员函数的内联实现：写在 protected 区域末尾
-  - private 成员函数的内联实现：写在 private 区域末尾
-- **禁止**将内联实现散乱分布在声明间，**必须**集中放在对应访问权限区域的尾部
+- 小型函数的内联实现**必须**集中放在对应访问权限区域（public / protected / private）的末尾，**禁止**散乱分布在声明之间
 
-## 6. 接口设计规范
+## 6. 函数规范
 
-- **必须**使用 `i_` 前缀
-- **必须**包含虚析构函数
-
-## 7. 函数规范
-
-### 7.1 关键规则
+### 6.1 关键规则
 - 单参数构造函数**必须**使用 `explicit`
 - 不抛异常的函数**必须**标记 `noexcept`
 - 赋值运算符**必须**返回自身引用
@@ -194,23 +174,33 @@ int calc_score(const user_t& user) {
 - **必须**使用 `using`，**禁止** `typedef`
 - **必须**显式声明特殊成员函数：优先 Rule of 0（`= default` 或不声明由编译器隐式生成）；一旦自定义任一特殊成员函数，则**必须**按 Rule of 5 显式声明全部（`= default` / `= delete` / 自定义）
 - **必须**在成员变量声明处直接初始化（默认成员初始化），**禁止**在构造函数体中对成员做简单赋值初始化
+- 重写虚函数**必须**使用 `override`
+- 不修改成员状态的成员函数**必须**标记 `const`
+- `constexpr` 函数**必须**正确使用
 
-### 7.2 lambda 表达式
+### 6.2 参数传递与移动语义
+- **必须**正确使用参数传递规则：
+  - 内置类型/小型结构：按值传递
+  - 大型对象：const 引用
+  - 需要修改：非const 引用
+  - 需要移动：右值引用
+- 移动构造函数和移动赋值运算符**必须**标记 `noexcept`（否则容器扩容时会退化为拷贝）
+
+### 6.3 lambda 表达式
 - **必须**显式捕获需要的变量
 - **禁止**捕获过多变量
 
-### 7.3 函数设计规则
-- 函数长度**建议**不超过 50 行；超过**必须**考虑拆分（单一职责，见第24条）
+### 6.4 函数设计规则
+- 函数长度**建议**不超过 50 行；超过**必须**考虑拆分（单一职责，见第 21 条）
 - 函数参数**建议**不超过 4 个；超过**必须**考虑封装为结构体或使用 builder 模式
 - **必须**使用提前返回（guard clause）简化嵌套：
 
   **正例**：
   ```cpp
   bool process(const input_t& in) {
-      if (!in.is_valid()) { return false; }   // 提前返回
+      if (!in.is_valid()) { return false; }
       if (in.is_empty()) { return false; }
-      // 主逻辑
-      return true;
+      return do_work(in);
   }
   ```
 
@@ -218,79 +208,54 @@ int calc_score(const user_t& user) {
   ```cpp
   bool process(const input_t& in) {
       if (in.is_valid()) {
-          if (!in.is_empty()) {
-              // 深层嵌套
-              return true;
+          if (!in.is_empty()) {    // 深层嵌套
+              return do_work(in);
           }
       }
       return false;
   }
   ```
-- **必须**优先使用纯函数（无副作用）；成员函数 `const` 修饰见第12条
+- **必须**优先使用纯函数（无副作用）
 - **禁止**输出参数（非 const 引用作为返回值），**必须**使用返回值或 `std::optional` / `std::expected`
 
-## 8. 移动语义
-
-- **必须**遵循 Rule of 0/3/5（规则详见 7.1）
-- 移动构造函数和赋值运算符**必须**标记 `noexcept`
-- **必须**正确使用参数传递规则：
-  - 内置类型/小型结构：按值传递
-  - 大型对象：const 引用
-  - 需要修改：非const 引用
-  - 需要移动：右值引用
-
-## 9. 命名空间
+## 7. 命名空间
 
 - **禁止**嵌套过深（建议最多2-3层）
 - **严禁**在头文件中使用 `using namespace`
 - **禁止**在源文件中使用 `using namespace std`
 - 文件内部符号**必须**放在匿名命名空间
 
-## 10. 类型推导与现代特性
+## 8. 类型推导与现代特性
 
-### 10.1 类型推导
+### 8.1 类型推导
 - **必须**明确使用 `auto`，避免隐式类型推导
-- `decltype` **必须**用于需要类型信息时
-- 模板函数**必须**使用尾返回类型或 `decltype`
 - `auto` 变量**必须**在声明时初始化
+- `decltype` **必须**用于需要类型信息时；模板函数**必须**使用尾返回类型或 `decltype`
 - **禁止** `auto` 的以下反模式：
 
   **反例**：
   ```cpp
   auto x = {1, 2, 3};           // 错！推导为 std::initializer_list<int>
-  auto p = new widget_t();      // 错！推导为 widget_t*，应避免裸 new（见第17条）
+  auto p = new widget_t();      // 错！应避免裸 new（见第 14 条）
   ```
 
-### 10.2 结构化绑定与 if constexpr
-- **必须**使用结构化绑定解构多返回值（替代 `std::tie`）：
-
-  ```cpp
-  auto [key, value] = *map_iter;            // 解构 map 节点
-  auto [x, y, z] = get_position();          // 解构多返回值
-  ```
+### 8.2 结构化绑定与 if constexpr
+- **必须**使用结构化绑定解构多返回值（替代 `std::tie`）：`auto [key, value] = *map_iter;`
 - **必须**使用 `if constexpr` 替代 SFINAE 实现编译期分支：
 
   ```cpp
   template<typename T>
   void process(T&& v) {
-      if constexpr (std::is_integral_v<T>) {
-          // 整型路径
-      } else if constexpr (std::is_floating_point_v<T>) {
-          // 浮点路径
-      }
+      if constexpr (std::is_integral_v<T>) { /* 整型路径 */ }
+      else if constexpr (std::is_floating_point_v<T>) { /* 浮点路径 */ }
   }
   ```
 
-### 10.3 concept 与约束（C++20）
+### 8.3 concept 与约束（C++20）
 - 模板约束**必须**优先使用 `concept` 替代 SFINAE / `static_assert`：
 
   **正例**：
   ```cpp
-  template<typename T>
-      requires std::integral<T>
-  T add(T a, T b) { return a + b; }
-
-  // 或简写形式
   template<std::integral T>
   T add(T a, T b) { return a + b; }
   ```
@@ -302,7 +267,7 @@ int calc_score(const user_t& user) {
   ```
 - 自定义 concept **必须**使用 `_t` 后缀以外的命名（concept 是编译期谓词，不加 `_t`）：`template<typename T> concept hashable = ...;`
 
-### 10.4 属性（Attributes）
+### 8.4 属性（Attributes）
 - 返回值不应被忽略的函数**必须**标记 `[[nodiscard]]`：
   ```cpp
   [[nodiscard]] bool is_valid() const;
@@ -314,7 +279,7 @@ int calc_score(const user_t& user) {
   ```
 - **禁止**使用 `[[deprecated]]` 之外的编译器扩展属性（如 `__attribute__((...))`），**必须**使用标准属性
 
-## 11. 模板规范
+## 9. 模板规范
 
 - 模板参数**必须**使用有意义的名称：`template<typename T>`
 - **必须**将模板实现放在 `.inl` 文件，由对应 `.h` 在末尾 `#include`（模板实现必须对使用方可见，否则会链接失败）
@@ -322,20 +287,13 @@ int calc_score(const user_t& user) {
 - **禁止**将模板实现放入 `.cpp`（除非使用显式实例化）
 - **禁止**在头文件中直接定义模板实现（应放入 `.inl`）
 
-## 12. 函数修饰符
+## 10. 性能与最佳实践
 
-- 重写虚函数**必须**使用 `override`
-- `const` 不需要修改成员函数**必须**标记 `const`
-- `constexpr` 函数**必须**正确使用
-
-## 13. 性能与最佳实践
-
-### 13.1 通用规则
+### 10.1 通用规则
 - **禁止**不必要拷贝，优先移动
 - **禁止**在构造函数中做复杂操作
-- **必须**使用 `std::optional` 表示可选值
 
-### 13.2 返回值优化（RVO/NRVO）
+### 10.2 返回值优化（RVO/NRVO）
 - **必须**按值返回局部对象，依赖 RVO/NRVO，**禁止**返回 `std::move` 局部对象（会禁用 NRVO）：
 
   **正例**：
@@ -355,40 +313,35 @@ int calc_score(const user_t& user) {
   }
   ```
 
-### 13.3 容器使用
-- **必须**在已知元素数量时调用 `reserve()` 预分配，避免多次重分配：
-  ```cpp
-  std::vector<int> v;
-  v.reserve(n);            // 预分配
-  for (int i = 0; i < n; ++i) { v.push_back(i); }
-  ```
+### 10.3 容器使用
+- **必须**在已知元素数量时调用 `reserve()` 预分配，避免多次重分配
 - **必须**优先使用 `emplace_back` / `emplace` 替代 `push_back` / `insert`，避免临时对象：
+
   ```cpp
-  v.emplace_back(42, "name");   // 直接构造
-  v.push_back(widget_t(42, "name")); // 错！多一次移动/拷贝
+  std::vector<widget_t> v;
+  v.reserve(n);
+  v.emplace_back(42, "name");         // 直接构造
+  v.push_back(widget_t(42, "name"));  // 错！多一次移动/拷贝
   ```
 - **禁止**对顺序容器使用 `std::list`（缓存不友好），**必须**优先 `std::vector` / `std::deque`
 - 容器选择详见**附录 B：容器选择决策树**
 
-## 14. 错误处理
+## 11. 错误处理
 
-- **必须**默认使用错误码 / `std::optional` / `std::expected` 方案（与 noexcept 安全风格一致）
+- **必须**默认使用错误码 / `std::optional` / `std::expected` 表示可能失败的操作或可选值（与 noexcept 安全风格一致）
   - 注：`std::expected` 为 C++23 特性。在 C++20 / C++17 项目中，**必须**使用 `std::optional` 或项目约定的第三方回退实现（如 `tl::expected` / `boost::outcome`）。
 - **仅在库边界且必要时**可使用异常，且**必须**捕获具体异常类型，**禁止**裸 `try-catch`
 - **禁止**在构造函数中抛出异常（使用工厂模式 + `std::optional` / `std::expected` 返回结果）
 - **必须**在析构函数中处理清理工作，**禁止**抛出异常
-- **必须**使用 `std::optional` 或 `std::expected` 表示可能失败的操作
 - 日志记录**必须**包含错误上下文信息
 
 **正例**：
 ```cpp
-// 用 std::expected 表示可能失败的操作
 std::expected<result_t, error_t> parse(std::string_view input);
 
-// 库边界捕获具体异常类型
 try {
     lib_call();
-} catch (const std::filesystem::filesystem_error& e) {
+} catch (const std::filesystem::filesystem_error& e) {  // 捕获具体类型
     log_error(e.what());
     return std::unexpected(error_t::io_failure);
 }
@@ -398,15 +351,13 @@ try {
 ```cpp
 try {
     lib_call();
-} catch (...) {                    // 错！裸 catch-all
-    // 错！默默吞掉异常
+} catch (...) {                    // 错！裸 catch-all 吞掉异常
 }
 catch (const std::exception& e) {  // 错！过宽基类
-    // ...
 }
 ```
 
-## 15. 日志规范
+## 12. 日志规范
 
 - **必须**使用统一日志系统，**禁止**直接使用 `cout` / `printf`
 - 日志级别：`DEBUG` / `INFO` / `WARN` / `ERROR` / `FATAL`
@@ -414,28 +365,19 @@ catch (const std::exception& e) {  // 错！过宽基类
 - 日志格式**必须**包含：时间戳、文件名、行号、日志级别、线程ID
 - **禁止**在高频循环中输出日志
 
-## 16. 并发规范
+## 13. 并发规范
 
-### 16.1 锁与同步原语
+### 13.1 锁与同步原语
 - **必须**使用 RAII 管理锁（`std::lock_guard` / `std::unique_lock` / `std::scoped_lock`）
 - **禁止**在持锁期间执行耗时操作
 - **必须**避免死锁：**禁止**嵌套锁，**必须**按固定顺序获取锁
-- 需要同时获取多把锁时，**必须**使用 `std::scoped_lock`（自动死锁避免）：
-  ```cpp
-  std::scoped_lock lk(mutex_a_, mutex_b_);   // 原子获取多把锁
-  ```
-- 读多写少场景**必须**使用 `std::shared_mutex` + `std::shared_lock`：
-  ```cpp
-  mutable std::shared_mutex mutex_;
-  // 读端
-  std::shared_lock lk(mutex_);
-  // 写端
-  std::unique_lock lk(mutex_);
-  ```
+- 需要同时获取多把锁时，**必须**使用 `std::scoped_lock`（自动死锁避免）：`std::scoped_lock lk(mutex_a_, mutex_b_);`
+- 读多写少场景**必须**使用 `std::shared_mutex` + `std::shared_lock`（读端 `shared_lock`，写端 `unique_lock`）
 - **禁止**使用 `std::recursive_mutex`（设计气味，通常说明锁粒度有问题）
 
-### 16.2 线程管理
+### 13.2 线程管理
 - **必须**使用 `std::jthread` 替代 `std::thread`（C++20，自动 join + 支持取消）：
+
   ```cpp
   std::jthread worker([this](std::stop_token st) {
       while (!st.stop_requested()) { /* ... */ }
@@ -443,7 +385,7 @@ catch (const std::exception& e) {  // 错！过宽基类
   ```
 - **禁止**使用裸 `std::thread`（忘记 join/detach 会导致 terminate）
 
-### 16.3 原子操作与内存序
+### 13.3 原子操作与内存序
 - 共享数据**必须**使用原子操作或锁保护
 - **必须**使用 `std::atomic` 替代简单标志位的 volatile
 - **必须**正确选择内存序：
@@ -451,23 +393,19 @@ catch (const std::exception& e) {  // 错！过宽基类
   - 仅在性能剖析确认需要时使用 `memory_order_acquire` / `memory_order_release` / `memory_order_relaxed`
   - **禁止**无依据地使用 `memory_order_relaxed`
 
-### 16.4 线程局部存储与通信
-- 线程私有状态**必须**使用 `thread_local`：
-  ```cpp
-  thread_local context_t tls_ctx;
-  ```
+### 13.4 线程局部存储与通信
+- 线程私有状态**必须**使用 `thread_local`
 - 线程间通信**必须**使用消息队列、条件变量或 `std::promise` / `std::future`
-- **禁止**使用条件变量的虚假唤醒：**必须**用谓词形式 `wait(lk, predicate)`：
+- **必须**用谓词形式 `wait(lk, predicate)` 防止条件变量虚假唤醒：
   ```cpp
   std::unique_lock lk(mutex_);
-  cv_.wait(lk, [this] { return ready_ || cancelled_; });  // 谓词形式
+  cv_.wait(lk, [this] { return ready_ || cancelled_; });
   ```
 
-## 17. 内存管理
+## 14. 内存管理
 
 - **必须**遵循 RAII 原则
-- **禁止**使用裸 `new` / `delete`，**必须**使用智能指针管理
-- `new` **必须**立即交给智能指针管理
+- **禁止**使用裸 `new` / `delete`；`new` **必须**立即交由智能指针管理
 - **禁止**在类的构造函数中使用 `new` 分配数组
 - 内存分配**必须**检查是否成功
 - **必须**使用内存池处理高频分配场景
@@ -485,18 +423,17 @@ catch (const std::exception& e) {  // 错！过宽基类
 
 **正例**：
 ```cpp
-auto p = std::make_unique<widget_t>();      // 独占所有权
-auto s = std::make_shared<config_t>();      // 共享所有权
+auto p = std::make_unique<widget_t>();
+auto s = std::make_shared<config_t>();
 ```
 
 **反例**：
 ```cpp
 widget_t* p = new widget_t();                // 错！裸 new
 std::unique_ptr<widget_t> p(new widget_t()); // 错！未用 make_unique
-delete p;                                    // 错！裸 delete
 ```
 
-## 18. 宏与预处理器规范
+## 15. 宏与预处理器规范
 
 - **优先**使用 `const` / `constexpr` / `enum` 替代宏定义常量
 - **优先**使用 `inline` / `constexpr` 函数替代宏定义函数
@@ -504,7 +441,7 @@ delete p;                                    // 错！裸 delete
 - **必须**使用 `do { ... } while(0)` 包裹多语句宏
 - **禁止**使用宏实现模板或泛型逻辑
 
-## 19. 安全规范
+## 16. 安全规范
 
 - **禁止**使用 `strcpy` / `sprintf` / `strncpy`（`strncpy` 不保证 null 终止且有截断问题）
 - **优先**使用 `std::string`、`std::string_view`、`std::format`；C 接口处**必须**使用 `snprintf`
@@ -514,33 +451,23 @@ delete p;                                    // 错！裸 delete
 - **必须**使用 `sizeof(buffer)` 而非硬编码大小
 - **禁止**使用 `rand` 生成安全随机数，**必须**使用 `std::random_device`
 
-### 19.1 `std::string_view` 生命周期安全
+### 16.1 `std::string_view` 生命周期安全
 - `std::string_view` **必须**视为非所有权视图，**禁止**持有超出源字符串生命周期的 view：
-
-  **正例**：
-  ```cpp
-  void process(std::string_view sv);             // 函数参数：安全
-  std::string s = make_string();
-  std::string_view sv = s;                        // 同作用域：安全
-  ```
 
   **反例**：
   ```cpp
   std::string_view get_view() {
-      std::string s = make_temp();                // 临时对象
-      return s;                                   // 错！返回指向已销毁对象的 view
+      std::string s = make_temp();
+      return s;                       // 错！返回指向已销毁对象的 view
   }
-  std::string_view sv = "hello"s;                 // 错！临时 string 销毁，view 悬垂
+  std::string_view sv = "hello"s;     // 错！临时 string 销毁，view 悬垂
   ```
+
 - 类成员**禁止**使用 `std::string_view` 存储字符串，**必须**使用 `std::string`
-- **必须**使用 `std::span` 替代 `const T*` + `size_t` 的连续内存参数组合：
-  ```cpp
-  void process(std::span<const int> data);       // 替代 (const int* p, size_t n)
-  ```
+- **必须**使用 `std::span` 替代 `const T*` + `size_t` 的连续内存参数组合：`void process(std::span<const int> data);`
 
 ---
-
-## 20. 测试规范
+## 17. 测试规范
 
 - **必须**为新功能编写单元测试
 - **必须**保证测试可重复执行
@@ -548,7 +475,7 @@ delete p;                                    // 错！裸 delete
 - 测试用例**必须**覆盖正常和异常路径
 - **禁止**在测试中使用 `sleep` 等待异步完成，应使用条件变量或 `future` 等同步机制
 
-## 21. 编译构建
+## 18. 编译构建
 
 - **必须**明确指定 C++ 标准（建议 C++20 起步，最低 C++17；若使用原生 `std::expected` / `std::print` 则建议 C++23 或引入兼容库）
 - **必须**使用 CMake 管理项目
@@ -557,7 +484,7 @@ delete p;                                    // 错！裸 delete
 - **禁止**修改第三方库源码，**必须**使用补丁或封装
 - **必须**在提交前执行完整构建和测试
 
-## 22. 设计模式
+## 19. 设计模式
 
 - **必须**根据场景选择合适模式，**禁止**过度设计
 - 单例模式**必须**使用 `std::call_once` + `std::once_flag`
@@ -565,7 +492,7 @@ delete p;                                    // 错！裸 delete
 - **必须**优先使用组合而非继承
 - **禁止**在模板中过度使用类型擦除
 
-## 23. Git 规范
+## 20. Git 规范
 
 - 提交信息**必须**遵循以下格式：
 
@@ -578,13 +505,12 @@ delete p;                                    // 错！裸 delete
 
   - 类型：`feat` / `fix` / `docs` / `style` / `refactor` / `test` / `chore`
   - 简短描述**必须**概括本次提交核心目的
-  - 变更描述**必须**列出具体改动点，每条以 `- ` 开头
-  - 变更描述**必须**说明"改了什么"及"为什么改"
+  - 变更描述**必须**列出具体改动点，每条以 `- ` 开头，说明"改了什么"及"为什么改"
 - 分支命名**必须**遵循：`类型/功能描述`
 - **必须**在合并前进行代码 review
 - **禁止**提交编译产物和临时文件
 
-## 24. 开发七大守则
+## 21. 开发七大守则
 
 1. **单一职责**：每个类/函数**必须**只做一件事
 2. **开闭原则**：**必须**对扩展开放，对修改关闭
@@ -594,66 +520,69 @@ delete p;                                    // 错！裸 delete
 6. **DRY 原则**：**禁止**重复代码，**必须**提取公共逻辑
 7. **KISS 原则**：**禁止**过度复杂，**必须**保持简单直接
 
-## 25. 文档遵循与建议
+## 22. AI 协作规范
 
+### 22.1 需求确认与计划先行原则
+- **必须**在遇到不确定问题时先向用户问清楚，**严禁**盲猜或基于假设实现；只要存在一点不明确之处，**必须**提出问题
+- 全部问题问清后，**必须**先产出一份详细的计划文档（`.md`）供用户阅读审查，**严禁**跳过审查直接动手编码
+- **必须**待用户确认计划符合需求并明确下达指令后，才开始实现
+- 计划不符合需求时，**必须**由用户指出不符合的内容并说明原因，AI 据此修订计划并再次提交审查
+- 实施过程中的任何阶段**均可以**向用户提问；**任何时候严禁**瞎猜用户意图，一切以用户明确说明为准
+
+### 22.2 文档遵循与建议
 1. **必须遵循文档内容**：所有编码实践**必须**严格遵循本规范，**禁止**添油加醋
 2. **可以给出建议**：在完成基础要求后，可以提出合理的改进建议供用户参考
 
-## 26. AI 协作规范
-
-### 26.1 需求确认原则
-- **必须**在遇到不确定问题时直接向用户询问
-- **严禁**基于假设进行实现
-- **严禁**默认推断用户需求，所有需求必须以用户明确说明为准
-
-### 26.2 简洁实现原则
+### 22.3 简洁实现原则
 - **必须**使用最少代码解决问题，50 行能完成则不使用 200 行
 - **必须**遵循代码最小化原则：能写一条代码实现**绝不**写两条，**禁止**冗余拆分或人为增加步骤
 - **禁止**编写未来可能需要的功能（YAGNI 原则）
-- 通用 KISS/DRY 原则详见第 24 条开发七大守则（及通用规范第 3 条），此处不重复
+- KISS/DRY 详见第 21 条
 
-### 26.3 最小变更原则
+### 22.4 最小变更原则
 - **只修改**与任务直接相关的代码
 - **严禁**修改无关代码
 - **严禁**顺手优化或重构无关代码
 - **必须**对每一行代码改动解释修改原因
 - **可以**提出优化建议，但**不得**擅自实施
 
-### 26.4 可验证交付原则
+### 22.5 可验证交付原则
 - **必须**将任务转化为可验证的具体结果
 - **必须**通过实际结果判断任务完成度
 - **严禁**仅凭感觉或主观判断认定任务完成
 - **必须**提供明确的验证方式或测试用例
 
-### 26.5 文档同步原则
+### 22.6 文档同步原则
 - **必须**在代码更改且通过验证等所有环节后，同步更新相关的技术或维护文档
 - 若该项变更不涉及任何现有文档，且无需新建文档，可以忽略此项要求
 
-### 26.6 AI 反模式清单（禁止行为）
+### 22.7 AI 反模式清单（禁止行为）
 
 以下禁止行为已在对应章节明确规定，此处仅做分类汇总：
 
-- **越权修改类**：顺手重构/优化/格式化无关代码（26.3）、添加未要求的功能（26.2）
-- **语言规范类**：双下划线 `__`（2.5）、裸 `enum`（2.2）、`typedef`（7.1）、`NULL`/`0`（7.1）
-- **错误处理类**：过宽异常捕获 `catch(...)`（14）
-- **内存与视图类**：裸 `new`/`delete`（17）、返回局部临时对象的 `std::string_view` / `std::span` 悬垂视图（19.1）
-- **性能与函数类**：局部对象返回显式 `return std::move(w);` 禁用 NRVO（13.2）、忽视 `[[nodiscard]]`（10.4）
-- **并发与命名空间类**：裸 `std::thread` 未 join（16.2）、头文件 `using namespace`、源文件 `using namespace std`（9）
-- **安全类**：`strcpy`/`sprintf`/`strncpy`（19）、`rand`（19）
+- **协作类**：盲猜需求、跳过计划审查直接编码（22.1）
+- **越权修改类**：顺手重构/优化/格式化无关代码（22.4）、添加未要求的功能（22.3）
+- **语言规范类**：双下划线 `__`（2.5）、裸 `enum`（2.2）、`typedef`（6.1）、`NULL`/`0`（6.1）
+- **错误处理类**：过宽异常捕获 `catch(...)`（11）
+- **内存与视图类**：裸 `new`/`delete`（14）、返回局部临时对象的 `std::string_view` / `std::span` 悬垂视图（16.1）
+- **性能与函数类**：局部对象返回显式 `return std::move(w);` 禁用 NRVO（10.2）、忽视 `[[nodiscard]]`（8.4）
+- **并发与命名空间类**：裸 `std::thread` 未 join（13.2）、头文件 `using namespace`、源文件 `using namespace std`（7）
+- **安全类**：`strcpy`/`sprintf`/`strncpy`/`rand`（16）
 
-### 26.7 版本号管理原则
+### 22.8 版本号管理原则
 - **每次修改必须同步更新**头部版本号与日期，**禁止**只改内容不改版本号
-- 版本号遵循语义化版本（见头部"版本规则"），提交信息**必须**写明版本升级轨迹（与第23条 Git 规范衔接）
+- 版本号遵循语义化版本（见头部"版本规则"），提交信息**必须**写明版本升级轨迹（与第 20 条 Git 规范衔接）
 
-### 26.8 AI 交付前强制自查 Checklist
+### 22.9 AI 交付前强制自查 Checklist
 
 AI 在完成 C++ 代码编写或修改后，**必须**在答复或提交前进行以下逐条自我检查：
 
-- [ ] 1. **最小变更**：是否仅修改了与当前任务相关的 C++ 代码？（未擅自重构或修改无关代码）
-- [ ] 2. **现代 C++ 规范**：是否使用了 `nullptr`、`using`、`override`、`noexcept`，未出现裸 `new`/`delete`？
-- [ ] 3. **视图与生命周期**：是否存在指向已销毁对象的 `std::string_view` 或 `std::span` 悬垂引用？
-- [ ] 4. **性能与 RVO**：按值返回局部对象时是否避免了显式 `std::move`？
-- [ ] 5. **顺序与格式**：实现文件（`.cc`/`.cpp`）中的函数定义顺序是否与头文件声明顺序 1:1 对齐？
+- [ ] 1. **计划先行**：编码前是否已提交计划文档并获得用户确认？（22.1）
+- [ ] 2. **最小变更**：是否仅修改了与当前任务相关的 C++ 代码？（未擅自重构或修改无关代码）
+- [ ] 3. **现代 C++ 规范**：是否使用了 `nullptr`、`using`、`override`、`noexcept`，未出现裸 `new`/`delete`？
+- [ ] 4. **视图与生命周期**：是否存在指向已销毁对象的 `std::string_view` 或 `std::span` 悬垂引用？
+- [ ] 5. **性能与 RVO**：按值返回局部对象时是否避免了显式 `std::move`？
+- [ ] 6. **顺序与格式**：实现文件（`.cc`/`.cpp`）中的函数定义顺序是否与头文件声明顺序 1:1 对齐？
 
 ---
 
@@ -661,53 +590,48 @@ AI 在完成 C++ 代码编写或修改后，**必须**在答复或提交前进�
 
 | 关键词 | 相关章节 |
 |--------|---------|
-| 智能指针选择 / unique_ptr / shared_ptr / weak_ptr | 17 |
-| 错误处理 / 异常 vs 错误码 / std::expected | 14 |
-| 模板实现放哪里 / .inl | 11 |
+| 需求确认 / 计划先行 / 先问后写 | 22.1 |
+| 智能指针选择 / unique_ptr / shared_ptr / weak_ptr | 14 |
+| 错误处理 / 异常 vs 错误码 / std::expected / std::optional | 11 |
+| 模板实现放哪里 / .inl | 9 |
 | 私有成员命名（变量/函数） | 2.4, 2.5 |
-| Rule of 0/3/5 | 7.1, 8 |
-| 列表初始化 / 圆括号初始化 | 7.1 |
+| Rule of 0/3/5 / 移动语义 / 参数传递 | 6.1, 6.2 |
+| 列表初始化 / 圆括号初始化 | 6.1 |
 | enum class | 2.2 |
-| 双下划线 / 保留标识符 | 2.5, 26.6 |
-| noexcept | 7.1, 8 |
-| override / const / constexpr | 12 |
-| using namespace | 9 |
+| 双下划线 / 保留标识符 | 2.5, 22.7 |
+| noexcept | 6.1, 6.2 |
+| override / const / constexpr / explicit | 6.1 |
+| using namespace | 7 |
 | 头文件引用顺序 | 1.3 |
-| 类成员组织顺序 | 4 |
-| 函数实现顺序 / 声明对应 | 4 |
+| 类成员组织顺序 / 函数实现顺序 | 4 |
 | 内联函数放置 / 头文件内联 | 5 |
-| 接口设计 / i_ 前缀 | 6 |
-| 并发 / 锁 / 死锁 | 16 |
-| jthread / shared_mutex / scoped_lock | 16 |
-| 内存序 / memory_order | 16.3 |
-| thread_local | 16.4 |
-| RAII | 16, 17 |
-| 日志格式 | 15 |
-| 安全字符串 / strcpy / strncpy | 19 |
-| string_view 生命周期 / 悬垂视图 | 19.1, 26.6 |
-| span / 连续内存参数 | 19.1, 26.6 |
-| concept / C++20 约束 | 10.3 |
-| [[nodiscard]] / 属性 | 10.4 |
-| 结构化绑定 / if constexpr | 10.2 |
-| auto 反模式 | 10.1 |
-| RVO / NRVO / 返回值优化 | 13.2, 26.6 |
-| 容器选择 / vector / list / map | 13.3, 附录 B |
-| reserve / emplace_back | 13.3 |
-| 函数注释格式 / /** */ / 文档注释 | 3.2 |
-| 函数内部注释 / 行内注释 / 文档注释 | 3.4 |
-| 函数设计 / 长度 / 参数 / 提前返回 | 7.3 |
-| 移动语义 / Rule of 0/3/5 | 8, 7.1 |
-| C++ 标准版本 / CMake / 编译选项 | 21 |
-| 单例模式 | 22 |
-| 工厂模式 | 22 |
-| Git 提交格式 | 23 |
-| 版本号管理 / SemVer / 升级规则 | 26.7 |
-| AI 反模式 / 禁止行为 | 26.6 |
-| AI 交付前自查 Checklist | 26.8 |
-| 最小变更 / 顺手重构 | 26.3, 26.6 |
-| 简洁实现 / 代码最小化 / 一条原则 | 26.2 |
-| YAGNI / KISS / DRY | 24, 26.2 |
-| 变更历史 / Changelog | 附录 C |
+| 接口设计 / i_ 前缀 / 虚析构 | 2.1, 4 |
+| 并发 / 锁 / 死锁 / jthread / shared_mutex / scoped_lock | 13 |
+| 内存序 / memory_order | 13.3 |
+| thread_local | 13.4 |
+| RAII | 13, 14 |
+| 日志格式 | 12 |
+| 安全字符串 / strcpy / strncpy / rand | 16 |
+| string_view 生命周期 / span / 悬垂视图 | 16.1, 22.7 |
+| concept / C++20 约束 | 8.3 |
+| [[nodiscard]] / [[maybe_unused]] / 属性 | 8.4 |
+| 结构化绑定 / if constexpr | 8.2 |
+| auto 反模式 | 8.1 |
+| RVO / NRVO / 返回值优化 | 10.2, 22.7 |
+| 容器选择 / vector / list / reserve / emplace_back | 10.3, 附录 B |
+| 函数注释 / 文档注释 / 函数内部注释 | 3.2 |
+| 函数设计 / 长度 / 参数 / 提前返回 / 输出参数 | 6.4 |
+| lambda / 捕获 | 6.3 |
+| C++ 标准版本 / CMake / 编译选项 | 18 |
+| 单例模式 / 工厂模式 | 19 |
+| Git 提交格式 / 分支命名 | 20 |
+| 版本号管理 / SemVer / 升级规则 | 22.8 |
+| 版本履历 / Changelog | 附录 C |
+| AI 反模式 / 禁止行为 | 22.7 |
+| AI 交付前自查 Checklist | 22.9 |
+| 最小变更 / 顺手重构 | 22.4, 22.7 |
+| 简洁实现 / 代码最小化 / YAGNI | 22.3 |
+| KISS / DRY / 七大守则 | 21, 22.3 |
 
 ---
 
@@ -744,3 +668,19 @@ AI 在完成 C++ 代码编写或修改后，**必须**在答复或提交前进�
 | 栈结构 | `std::vector` + `push_back`/`pop_back` | 比适配器更灵活 |
 | 队列结构 | `std::deque` | 头尾 O(1) |
 | 优先队列 | `std::priority_queue` | 堆实现 |
+
+---
+
+## 附录 C：版本履历
+
+| 版本 | 日期 | 变更摘要 |
+|------|------|---------|
+| 5.0.1 | 2026-08-22 | 新增本附录；附录 A 增加"版本履历"关键词行 |
+| 5.0.0 | 2026-08-22 | 章节重构 26→22 章（接口设计/移动语义/函数修饰符/文档遵循并入他章）；新增"需求确认与计划先行原则"；全局字数精简；修复附录 A 幽灵引用 |
+| 4.10.0 | 2026-08-01 | 优化 AI 反模式清单分类；新增 AI 交付前强制自查 Checklist；补全 weak_ptr 循环引用决策树；新增 std::expected 标准建议 |
+| 4.7.0 | 2026-07-07 | 新增函数实现顺序与声明一致、内联函数按访问权限区域集中放置规则；函数注释强制 `/** */` 文档格式 |
+| 4.5.1 | 2026-07-04 | 新增函数内部注释禁用规则 |
+| 4.5.0 | 2026-06-27 | 新增函数设计规则；扩展类型推导（auto/结构化绑定/concept/属性）；新增 RVO/NRVO、容器使用规则、并发扩充、string_view 生命周期安全、容器选择决策树 |
+| 4.4.0 | 2026-06-24 | 初始版本 |
+
+> 4.6.0 / 4.8.0 / 4.9.0 为区间中间版本，无独立变更记录，详见 git 历史。
