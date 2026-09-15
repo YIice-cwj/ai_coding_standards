@@ -1,9 +1,9 @@
 # UE5 C++ 开发规范
 
-**版本**: 1.1.1  **日期**: 2026-08-22
+**版本**: 1.3.0  **日期**: 2026-09-16
 
-> **适用范围**：所有 UE5 项目 C++ 新代码；修改老代码时遵循最小变更原则（见 26.3），不强制重构未触及的代码
-> **基准规范**：本规范派生自《C++ AI 编码规范 v5.0.0》，在 UE5 引擎约束下做适配与仲裁；两者冲突时以本规范为准
+> **适用范围**：所有 UE5 项目 C++ 新代码；修改老代码时遵循最小变更原则（见 27.3），不强制重构未触及的代码
+> **基准规范**：本规范派生自《C++ AI 编码规范 v5.1.0》，在 UE5 引擎约束下做适配与仲裁；两者冲突时以本规范为准
 > **使用方式**：AI 应在编码前全文加载本规范；遇到规则冲突时按下方"优先级"裁决
 > **优先级**（高→低）：安全规范（19）> UE5 引擎约束 > 正确性（14）> 可读性（3）> 性能（13）> 风格（1-2）
 > **版本规则**：遵循语义化版本（SemVer）
@@ -34,10 +34,11 @@
 20. [测试规范](#20-测试规范)
 21. [编译构建](#21-编译构建)
 22. [设计模式](#22-设计模式)
-23. [Git 规范](#23-git-规范)
-24. [开发七大守则](#24-开发七大守则)
-25. [文档遵循与建议](#25-文档遵循与建议)
-26. [AI 协作规范](#26-ai-协作规范)
+23. [网络同步与 Gameplay 生命周期规范](#23-网络同步与-gameplay-生命周期规范)
+24. [Git 规范](#24-git-规范)
+25. [开发七大守则](#25-开发七大守则)
+26. [文档遵循与建议](#26-文档遵循与建议)
+27. [AI 协作规范](#27-ai-协作规范)
 - [附录 A：UE5 反射宏家族速查](#附录-aue5-反射宏家族速查)
 - [附录 B：UPROPERTY Specifier 速查](#附录-buproperty-specifier-速查)
 - [附录 C：UFUNCTION Specifier 速查](#附录-cufunction-specifier-速查)
@@ -190,7 +191,7 @@ private:
 > **继承 C++ 规范 3.2**：
 - **禁止**在函数体内添加任何行内注释（`// xxx`）或块注释
 - 如需说明函数实现思路、关键步骤、注意事项，**必须**写在函数定义上方的文档注释 `/** */` 中
-- 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（见第 24 条单一职责）
+- 若函数内部确需注释才能理解，说明函数过于复杂，**必须**考虑拆分（见第 25 条单一职责）
 
 **正例**：
 ```cpp
@@ -333,7 +334,7 @@ public:
 - UE5 项目中 lambda 优先用 `TFunction` 而非 `std::function`
 
 ### 7.4 函数设计规则
-- 函数长度**建议**不超过 50 行；超过**必须**考虑拆分（单一职责，见第 24 条）
+- 函数长度**建议**不超过 50 行；超过**必须**考虑拆分（单一职责，见第 25 条）
 - 函数参数**建议**不超过 4 个；超过**必须**考虑封装为结构体
 - **必须**使用提前返回（guard clause）简化嵌套
 - **必须**优先使用纯函数（无副作用）；成员函数 `const` 修饰见第 12 条
@@ -973,11 +974,148 @@ bool FFlexiBagComponentTest::RunTest(const FString& Parameters) {
 
 ---
 
-## 23. Git 规范
+## 23. 网络同步与 Gameplay 生命周期规范
+
+> **UE5 特化规范**：在多人网络游戏与 GAS（Gameplay Ability System）架构下，对象生命周期与网络同步具有严格的端位与时序约束，必须严格遵循以下原则。
+
+### 23.1 时序归属（生命周期自驱动）
+
+- 复制相关的初始化（开启复制 `SetIsReplicatedByDefault(true)`、注册属性集 `AttributeSet`、`InitAbilityActorInfo` 等）**必须**由宿主 Actor（如 `APlayerState` / `APawn`）根据自身生命周期自驱动触发。
+- **严禁**在 `AGameModeBase` / `AGameMode` 的生命周期回调或登录事件（如 `PostLogin`、`RestartPlayer`、`HandleStartingNewPlayer`）中代劳调用 PlayerState 或 Pawn 的网络/复制初始化函数。
+- **机理与原因**：
+  - GameMode 仅存在于服务器（Server-Only），其回调仅反映服务器端业务步骤"逻辑就绪"，根本无法感知客户端 Actor 是否生成、属性初次复制是否送达（"网络就绪"）。
+  - 在 GameMode 回调中强行代劳，会导致客户端缺失关键网络初始化（如客户端未执行 `InitAbilityActorInfo` 导致能力无法预测、动画无法播放、UI 监听断裂），或造成多端严重的时序竞态。
+- **驱动时机约定**：
+  - **服务器端**：在 `PossessedBy` / `PostInitializeComponents` 等生命周期节点自驱动。
+  - **客户端**：在 `OnRep_PlayerState` / `OnRep_Owner` / `ClientInitialize` 等网络通知时机自驱动。
+
+**正例**：
+```cpp
+// ✅ 正确：PlayerState / Pawn 按自身生命周期自驱动初始化
+void AMyPlayerState::PostInitializeComponents() {
+    Super::PostInitializeComponents();
+    if (HasAuthority()) {
+        try_init_ability_system();
+    }
+}
+
+void AMyPlayerState::OnRep_Owner() {
+    Super::OnRep_Owner();
+    // 客户端在网络所有者就绪时自驱动
+    try_init_ability_system();
+}
+```
+
+**反例**：
+```cpp
+// ❌ 错误：在 GameMode 登录回调中越权代劳网络初始化
+void AMyGameMode::PostLogin(APlayerController* new_player) {
+    Super::PostLogin(new_player);
+    if (AMyPlayerState* ps = new_player->GetPlayerState<AMyPlayerState>()) {
+        // 错！外部只知道逻辑就绪，客户端此时根本尚未"网络就绪"，会导致客户端初始化丢失
+        ps->init_ability_system();
+    }
+}
+```
+
+### 23.2 幂等创建（创建与初始化分离）
+
+- 对象实例一经创建，后续永远复用，**禁止**重复创建覆盖。
+- **必须**严格解耦"对象创建"（Creation / Allocation）与"状态初始化"（Initialization / Configuration）：
+  - **创建**：仅在对象生命周期伊始执行一次（如在构造函数中使用 `CreateDefaultSubobject`，或惰性加载时通过 `if (!instance)` 保护执行单次 `NewObject`）。
+  - **初始化**：支持幂等多次调用。负责配置状态、设置 Owner/AvatarActor、注册属性集、幂等绑定委托等，**绝不能**重新分配（Reallocate）对象实例。
+- **机理与原因**：
+  - 在网络游戏中，Actor 重生（Respawn）、Possess 重新附身、无缝切图（Seamless Travel）或断线重连时，生命周期函数（如 `PossessedBy`、`OnRep_PlayerState`）会被**多次重复调用**。
+  - 若每次初始化都重新创建对象（如重新分配 ASC 或属性集），将导致旧对象被 GC 回收后产生悬垂指针、已绑定的委托与监听失效、网络同步句柄断裂。
+- **工程实践提示**：类似项目中的 `try_init_ability_system()` 与 `init_attribute_set()` 均须按此原则收敛，确保存续实例始终复用。
+
+**正例**：
+```cpp
+// ✅ 正确：创建与初始化解耦，多次调用安全幂等
+void AMyPlayerState::try_init_ability_system() {
+    if (!ability_system_component) {
+        // 首次创建（或构造函数已创建）：仅执行一次
+        ability_system_component = NewObject<UAbilitySystemComponent>(this, TEXT("AbilitySystemComponent"));
+        ability_system_component->SetIsReplicated(true);
+        ability_system_component->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+    }
+
+    if (!attribute_set) {
+        // 属性集实例仅创建一次，后续永远复用
+        attribute_set = NewObject<UMyAttributeSet>(this, TEXT("AttributeSet"));
+    }
+
+    // 后续可被多次幂等调用的初始化逻辑（如重新附身时刷新 ActorInfo）
+    AActor* avatar_actor = GetPawn();
+    ability_system_component->InitAbilityActorInfo(this, avatar_actor);
+}
+```
+
+**反例**：
+```cpp
+// ❌ 错误：每次初始化都重新分配实例，覆盖现有对象
+void AMyPlayerState::init_ability_system() {
+    // 错！重生或二次调用时重新创建，破坏已有的网络同步状态与委托绑定
+    ability_system_component = NewObject<UAbilitySystemComponent>(this);
+    attribute_set = NewObject<UMyAttributeSet>(this);
+    ability_system_component->InitAbilityActorInfo(this, GetPawn());
+}
+```
+
+### 23.3 身份分叉（三路职责分离与默认不做原则）
+
+- 任何初始化与 Gameplay 逻辑的第一步，**必须**首先显式检查网络身份与端位角色（`HasAuthority()`、`IsLocallyControlled()` / `IsLocalController()`）。
+- **必须**将**服务器（Authority）**、**本地客户端（Autonomous Proxy / Local Client）**、**远端客户端（Simulated Proxy / Remote Client）** 三路职责明确分离。
+- **必须遵循防御性设计：默认不做（Default No-Op），按需开启**。未明确需要执行的端位，必须提前返回（Guard Clause），严禁凭直觉无差别全端执行。
+
+**三路职责矩阵**：
+
+| 端位角色 | 判定条件 | 核心职责 | 严禁行为 |
+|---|---|---|---|
+| **服务器**（Authority） | `HasAuthority()` | 权威属性计算、GAS 授予 Ability / GameplayEffect、核心状态裁决、生成权威 Actor | 严禁创建 Slate/UMG、处理本地输入、播放纯本地音画 |
+| **本地客户端**（Autonomous Proxy） | `!HasAuthority() && IsLocallyControlled()` | 本地 HUD / UI 创建与数据绑定、本地输入映射、GAS 能力本地预测、相机震屏与第一人称表现 | 严禁执行权威扣血/修改属性、直接变更不可预测的全局状态 |
+| **远端客户端**（Simulated Proxy） | `!HasAuthority() && !IsLocallyControlled()` | 表现层状态被动同步、动画蒙太奇播放、位置插值平滑、受击通用特效与音效 | 严禁创建本地 HUD、绑定输入、执行本地特权逻辑或服务端权威计算 |
+
+**正例**：
+```cpp
+// ✅ 正确：首要检查端位身份，职责清晰，未匹配端位默认不做
+void AMyCharacter::init_player_context() {
+    const bool is_authority = HasAuthority();
+    const bool is_local = IsLocallyControlled();
+
+    if (is_authority) {
+        // 服务器端：仅负责授予初始技能与权威状态配置
+        grant_default_abilities();
+    }
+
+    if (is_local) {
+        // 本地玩家端：仅负责创建本地 HUD 与输入绑定
+        setup_local_hud();
+        bind_input_actions();
+    }
+
+    // 远端模拟客户端（!is_authority && !is_local）：默认不做，完全依赖属性与状态复制驱动表现
+}
+```
+
+**反例**：
+```cpp
+// ❌ 错误：缺少身份分叉，全端无差别执行
+void AMyCharacter::init_player_context() {
+    // 错！Dedicated Server 会尝试创建 Slate UI 导致崩溃；远端模拟代理也会创建本地 HUD
+    create_player_hud();
+    // 错！客户端也尝试调用仅服务器有效的授予技能
+    grant_default_abilities();
+}
+```
+
+---
+
+## 24. Git 规范
 
 > **继承 C++ 规范 20**：
 
-### 23.1 提交信息格式
+### 24.1 提交信息格式
 
 ```
 [类型]: 简短描述
@@ -991,10 +1129,10 @@ bool FFlexiBagComponentTest::RunTest(const FString& Parameters) {
 - 变更描述**必须**列出具体改动点，每条以 `- ` 开头
 - 变更描述**必须**说明"改了什么"及"为什么改"
 
-### 23.2 分支命名
+### 24.2 分支命名
 - 分支命名**必须**遵循：`类型/功能描述`
 
-### 23.3 UE5 特化规则
+### 24.3 UE5 特化规则
 - **必须**配置 `.gitignore` 忽略 `Binaries/` / `Intermediate/` / `Saved/` / `DerivedDataCache/`
 - **禁止**提交 `.uproject` 中的 `Plugins` 数组变更（除非新增/删除插件）
 - **必须**在合并前进行代码 review
@@ -1003,7 +1141,7 @@ bool FFlexiBagComponentTest::RunTest(const FString& Parameters) {
 
 ---
 
-## 24. 开发七大守则
+## 25. 开发七大守则
 
 > **继承 C++ 规范 21**：
 
@@ -1017,7 +1155,7 @@ bool FFlexiBagComponentTest::RunTest(const FString& Parameters) {
 
 ---
 
-## 25. 文档遵循与建议
+## 26. 文档遵循与建议
 
 > **继承 C++ 规范 22.2**：
 
@@ -1026,45 +1164,49 @@ bool FFlexiBagComponentTest::RunTest(const FString& Parameters) {
 
 ---
 
-## 26. AI 协作规范
+## 27. AI 协作规范
 
 > **继承 C++ 规范 22**：
 
-### 26.1 需求确认与计划先行原则
+### 27.1 需求确认与计划先行原则
 - **必须**在遇到不确定问题时先向用户问清楚，**严禁**盲猜或基于假设实现；只要存在一点不明确之处，**必须**提出问题
 - 全部问题问清后，**必须**先产出一份详细的计划文档（`.md`）供用户阅读审查，**严禁**跳过审查直接动手编码
+- 计划文档**必须**给出多个角度的候选解决方案，含各自优劣、风险与适用场景对比及推荐理由，供用户裁决
+- 仅存在单一合理路径时，**必须**说明原因；**严禁**不经对比直接锁定唯一方案
 - **必须**待用户确认计划符合需求并明确下达指令后，才开始实现
 - 计划不符合需求时，**必须**由用户指出不符合的内容并说明原因，AI 据此修订计划并再次提交审查
 - 实施过程中的任何阶段**均可以**向用户提问；**任何时候严禁**瞎猜用户意图，一切以用户明确说明为准
 
-### 26.2 简洁实现原则
+### 27.2 简洁实现原则
 - **必须**使用最少代码解决问题，50 行能完成则不使用 200 行
 - **必须**遵循代码最小化原则
 - **禁止**编写未来可能需要的功能（YAGNI 原则）
 
-### 26.3 最小变更原则
+### 27.3 最小变更原则
 - **只修改**与任务直接相关的代码
 - **严禁**修改无关代码
 - **严禁**顺手优化或重构无关代码
 - **必须**对每一行代码改动解释修改原因
 - **可以**提出优化建议，但**不得**擅自实施
 
-### 26.4 可验证交付原则
+### 27.4 可验证交付原则
 - **必须**将任务转化为可验证的具体结果
 - **必须**通过实际结果判断任务完成度
 - **严禁**仅凭感觉或主观判断认定任务完成
 - **必须**提供明确的验证方式或测试用例
+- 交付前**必须**自行从多角度高强度验证：方案是否为最优解、是否存在漏洞、边界条件、极端条件等，**严禁**随便验证了事
+- **必须**待多方面验证全部通过后，方可交付用户
 
-### 26.5 文档同步原则
+### 27.5 文档同步原则
 - **必须**在代码更改且通过验证等所有环节后，同步更新相关的技术或维护文档
 - 若该项变更不涉及任何现有文档，且无需新建文档，可以忽略此项要求
 
-### 26.6 AI 反模式清单（禁止行为）
+### 27.6 AI 反模式清单（禁止行为）
 
 以下禁止行为已在对应章节明确规定，此处仅做分类汇总：
 
-- **协作类**：盲猜需求、跳过计划审查直接编码（26.1）
-- **越权修改类**：顺手重构/优化/格式化无关代码（26.3）、添加未要求的功能（26.2）
+- **协作类**：盲猜需求、跳过计划审查直接编码（27.1）、不经多方案对比锁定唯一实现（27.1）、随便验证了事即交付（27.4）
+- **越权修改类**：顺手重构/优化/格式化无关代码（27.3）、添加未要求的功能（27.2）
 - **语言规范类**：双下划线 `__`（2.5）、裸 `enum`（2.2）、`typedef`（7.1）、`NULL`/`0`（7.1）
 - **UE5 反模式类**：
   - UObject 用 `new` / `std::make_unique`（17.2）
@@ -1077,10 +1219,14 @@ bool FFlexiBagComponentTest::RunTest(const FString& Parameters) {
   - `std::string` / `std::vector` 等容器（9）
   - C++ 异常（14）
   - `cout` / `printf` 日志（15.1）
+- **网络与生命周期类**：
+  - 在 GameMode 回调中跨边界代劳网络/复制初始化（23.1）
+  - 生命周期中未做幂等检查重复创建对象（23.2）
+  - 未做端位身份分叉（HasAuthority/IsLocallyControlled）无差别执行多端逻辑（23.3）
 - **错误处理类**：过宽异常捕获 `catch(...)`（14）
 - **安全类**：`strcpy`/`sprintf`/`strncpy`（19.1）、`rand`（19.2）
 
-### 26.7 版本号管理原则
+### 27.7 版本号管理原则
 - **每次修改必须同步更新**头部版本号与日期，**禁止**只改内容不改版本号
 - 版本号遵循语义化版本（见头部"版本规则"），提交信息**必须**写明版本升级轨迹
 
