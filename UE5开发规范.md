@@ -1,9 +1,9 @@
 # UE5 C++ 开发规范
 
-**版本**: 1.6.0  **日期**: 2026-09-19
+**版本**: 1.7.0  **日期**: 2026-09-19
 
 > **适用范围**：所有 UE5 项目 C++ 新代码；修改老代码时遵循最小变更原则（见 27.3），不强制重构未触及的代码
-> **基准规范**：本规范派生自《C++ AI 编码规范 v5.4.0》，在 UE5 引擎约束下做适配与仲裁；两者冲突时以本规范为准
+> **基准规范**：本规范派生自《C++ AI 编码规范 v5.5.0》，在 UE5 引擎约束下做适配与仲裁；两者冲突时以本规范为准
 > **使用方式**：AI 应在编码前全文加载本规范；遇到规则冲突时按下方"优先级"裁决
 > **优先级**（高→低）：安全规范（19）> UE5 引擎约束 > 正确性（14）> 可读性（3）> 性能（13）> 风格（1-2）
 > **版本规则**：遵循语义化版本（SemVer）
@@ -232,14 +232,20 @@ int32 calc_score(const FUserData& user) const {
 
 1. `public` 类型定义（含 USTRUCT 嵌套、using 别名）
 2. `protected` 类型定义
-3. `private` 成员变量（含 UPROPERTY）
-4. `protected` 成员变量
-5. `public` 成员变量（谨慎使用）
-6. `private` 成员函数
-7. `protected` 成员函数
-8. `public` 成员函数（含 UFUNCTION）
-9. 静态函数
-10. UE5 反射相关重写（如 `GetLifetimeReplicatedProps`、`ReplicateSubobjects`）
+3. `private` 类型定义
+4. `private` 常量
+5. `protected` 常量
+6. `public` 常量
+7. `private` 成员变量（含 UPROPERTY）与静态变量
+8. `protected` 成员变量与静态变量
+9. `public` 成员变量（谨慎使用）与静态变量
+10. `private` 成员函数
+11. `protected` 成员函数
+12. `public` 成员函数（含 UFUNCTION）
+13. `private` 静态函数
+14. `protected` 静态函数
+15. `public` 静态函数
+16. UE5 反射相关重写（如 `GetLifetimeReplicatedProps`、`ReplicateSubobjects`）
 
 **函数实现顺序必须与类中声明顺序一致**：`.cpp` 中的函数实现**必须**按照头文件中声明的先后顺序排列。
 
