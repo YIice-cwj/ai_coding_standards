@@ -1,9 +1,9 @@
 # UE5 C++ 开发规范
 
-**版本**: 1.4.0  **日期**: 2026-09-17
+**版本**: 1.5.1  **日期**: 2026-09-19
 
 > **适用范围**：所有 UE5 项目 C++ 新代码；修改老代码时遵循最小变更原则（见 27.3），不强制重构未触及的代码
-> **基准规范**：本规范派生自《C++ AI 编码规范 v5.2.0》，在 UE5 引擎约束下做适配与仲裁；两者冲突时以本规范为准
+> **基准规范**：本规范派生自《C++ AI 编码规范 v5.3.1》，在 UE5 引擎约束下做适配与仲裁；两者冲突时以本规范为准
 > **使用方式**：AI 应在编码前全文加载本规范；遇到规则冲突时按下方"优先级"裁决
 > **优先级**（高→低）：安全规范（19）> UE5 引擎约束 > 正确性（14）> 可读性（3）> 性能（13）> 风格（1-2）
 > **版本规则**：遵循语义化版本（SemVer）
@@ -458,6 +458,7 @@ auto p = new widget();         // 错！推导为 widget*，应避免裸 new
 
 ### 11.1 模板实现位置
 - 模板参数**必须**使用有意义的名称：`template<typename T>`
+- 类模板**必须**通过 `using` 为模板参数及相关类型定义语义化别名（`value_type` / `size_type` 等，放 public 类型定义区），类内及成员函数签名**禁止**直接使用 `T`
 - 模板实现**必须**放在 `.inl` 文件，由对应 `.h` 在末尾 `#include`
 - 模板特化**必须**明确标注
 - **禁止**将模板实现放入 `.cpp`（除非使用显式实例化）
@@ -688,13 +689,13 @@ UE_LOG(LogFlexiInventory, Error, TEXT("Failed to save bag: %s"), *error_msg);
 | 延迟执行 | `FTimerHandle` + `SetTimerByEvent` |
 
 ```cpp
-// 异步任务
-FAsyncTask<FMyTask>* task = new FAsyncTask<FMyTask>(args...);
+// 异步任务：TUniquePtr 管理（禁止裸 new/delete，见 17.1）
+TUniquePtr<FAsyncTask<FMyTask>> task = MakeUnique<FAsyncTask<FMyTask>>(args...);
 task->StartBackgroundTask();
 // 主线程轮询
 if (task->IsDone()) {
     auto result = task->GetTask().result;
-    delete task;
+    task.Reset();
 }
 
 // TFuture
@@ -858,7 +859,7 @@ class UMyComponent : public UActorComponent {
 - **必须**使用 `FMath::Rand()`（简单场景）或 `FRandomStream`（可复现场景）
 
 ### 19.3 输入校验
-- 输入数据**必须**进行有效性校验
+- 外部输入数据**必须**进行有效性校验（内部调用链已保证的数据不重复校验，见 7.4）
 - **禁止**在代码中硬编码密钥、密码
 
 ### 19.4 `FStringView` 生命周期安全
@@ -1209,7 +1210,7 @@ void AMyCharacter::init_player_context() {
 
 - **协作类**：盲猜需求、跳过计划审查直接编码（27.1）、不经多方案对比锁定唯一实现（27.1）、随便验证了事即交付（27.4）
 - **越权修改类**：顺手重构/优化/格式化无关代码（27.3）、添加未要求的功能（27.2）、添加多余的边界判断（7.4）
-- **语言规范类**：双下划线 `__`（2.5）、裸 `enum`（2.2）、`typedef`（7.1）、`NULL`/`0`（7.1）
+- **语言规范类**：双下划线 `__`（2.5）、裸 `enum`（2.2）、`typedef`（7.1）、`NULL`/`0`（7.1）、类模板内直接使用 T 而非类型别名（11.1）
 - **UE5 反模式类**：
   - UObject 用 `new` / `std::make_unique`（17.2）
   - `UObject*` 成员无 `UPROPERTY`（17.3）
